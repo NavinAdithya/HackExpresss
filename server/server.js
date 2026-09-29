@@ -33,10 +33,21 @@ const analyticsRoutes = require('./routes/analytics');
 const app = express();
 const server = http.createServer(app);
 
+// Determine allowed CORS origin
+const getCorsOrigin = () => {
+  if (process.env.CLIENT_URL) return process.env.CLIENT_URL;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  if (process.env.NODE_ENV === 'production') return true;
+  return 'http://localhost:5173';
+};
+
+const corsOrigin = getCorsOrigin();
+
 // Socket.io
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: corsOrigin,
     methods: ['GET', 'POST'],
   },
 });
@@ -44,11 +55,24 @@ const io = new Server(server, {
 // Middleware
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: corsOrigin,
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' })); // For face verification images
 app.use(morgan('dev'));
+
+// Ensure database connection is initialized for serverless invocations
+let dbInitPromise = null;
+app.use(async (req, res, next) => {
+  if (!dbInitPromise) {
+    dbInitPromise = connectDB().catch((err) => {
+      console.error('[DB] Connection error:', err);
+    });
+  }
+  await dbInitPromise;
+  next();
+});
+
 app.use('/api/', apiLimiter);
 
 // API Routes
@@ -105,8 +129,11 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-// Export for testing
-module.exports = { app, server, io };
+// Export app directly for Vercel serverless entrypoint while supporting named exports
+module.exports = app;
+module.exports.app = app;
+module.exports.server = server;
+module.exports.io = io;
 
 // Start if not in test mode
 if (process.env.NODE_ENV !== 'test') {

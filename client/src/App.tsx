@@ -26,26 +26,22 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const location = useLocation();
-
   return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
-        <Route path="/auth" element={<AuthPage />} />
-        <Route path="/track/:token" element={<TrackingPage />} />
-        <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/trip/create" element={<CreateTripPage />} />
-          <Route path="/trips" element={<TripsPage />} />
-          <Route path="/matches/:tripId" element={<MatchesPage />} />
-          <Route path="/trip/:tripId/active" element={<ActiveTripPage />} />
-          <Route path="/trip/:tripId/complete" element={<TripCompletePage />} />
-          <Route path="/plans" element={<PlansPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AnimatePresence>
+    <Routes>
+      <Route path="/auth" element={<AuthPage />} />
+      <Route path="/track/:token" element={<TrackingPage />} />
+      <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/trip/create" element={<CreateTripPage />} />
+        <Route path="/trips" element={<TripsPage />} />
+        <Route path="/matches/:tripId" element={<MatchesPage />} />
+        <Route path="/trip/:tripId/active" element={<ActiveTripPage />} />
+        <Route path="/trip/:tripId/complete" element={<TripCompletePage />} />
+        <Route path="/plans" element={<PlansPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 

@@ -3,8 +3,8 @@
  */
 
 const RIDE_CONFIG = {
-  // Daily ride cap
-  maxRidesPerDay: 2,
+  // Daily ride cap (10 for development/demo testing, 2 for production)
+  maxRidesPerDay: process.env.NODE_ENV === 'development' ? 10 : 2,
 
   // No-show penalty
   pickupGraceMinutes: 10,

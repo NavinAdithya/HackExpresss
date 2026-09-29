@@ -5,7 +5,8 @@
 import { io, Socket } from 'socket.io-client';
 import type { LocationUpdate } from '../types';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ||
+  (typeof window !== 'undefined' && window.location.hostname !== 'localhost' ? window.location.origin : 'http://localhost:5000');
 
 let socket: Socket | null = null;
 

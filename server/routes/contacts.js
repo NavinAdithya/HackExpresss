@@ -69,7 +69,11 @@ router.post('/share/:tripId', auth, async (req, res) => {
       await trip.save();
     }
 
-    const trackingUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/track/${trip.sharedTrackingToken}`;
+    const clientBase = process.env.CLIENT_URL
+      || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null)
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+      || 'http://localhost:5173';
+    const trackingUrl = `${clientBase}/track/${trip.sharedTrackingToken}`;
 
     // MOCKED FOR DEMO:
     // Production would send SMS/push to trusted contacts

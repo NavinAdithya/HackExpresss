@@ -81,7 +81,7 @@ export function CreateTripPage() {
 
   return (
     <PageTransition>
-      <div style={{ padding: '24px 16px', maxWidth: '600px', margin: '0 auto' }}>
+      <div style={{ padding: '24px 16px 60px 16px', maxWidth: '600px', margin: '0 auto' }}>
         <FadeReveal>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
             <motion.button
@@ -247,16 +247,10 @@ export function CreateTripPage() {
           </GlassSurface>
         </FadeReveal>
 
-        {error && (
-          <p style={{ color: theme.danger, fontSize: '0.8125rem', marginBottom: '16px', textAlign: 'center' }}>
-            {error}
-          </p>
-        )}
-
         {/* Route Preview Map */}
         {originCoords && destCoords && (
           <FadeReveal delay={0.32}>
-            <div style={{ height: '180px', marginBottom: '20px' }}>
+            <div style={{ height: '180px', marginBottom: '20px', borderRadius: theme.radiusLg, overflow: 'hidden' }}>
               <MapView
                 origin={[originCoords[1], originCoords[0]]}
                 destination={[destCoords[1], destCoords[0]]}
@@ -265,6 +259,26 @@ export function CreateTripPage() {
               />
             </div>
           </FadeReveal>
+        )}
+
+        {error && (
+          <div style={{
+            padding: '12px 16px',
+            borderRadius: theme.radiusMd,
+            background: 'rgba(255, 59, 92, 0.12)',
+            border: '1px solid rgba(255, 59, 92, 0.3)',
+            color: '#ff6b81',
+            fontSize: '0.8125rem',
+            marginBottom: '16px',
+            textAlign: 'center',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+          }}>
+            <span>⚠️</span>
+            <span>{error}</span>
+          </div>
         )}
 
         <FadeReveal delay={0.35}>
