@@ -141,7 +141,7 @@ router.put('/:id/accept', auth, async (req, res) => {
 
     if (tripA) {
       tripA.status = 'ACCEPTED';
-      tripA.matchedTripId = tripB._id;
+      tripA.matchedTripId = tripB?._id || match.tripB;
       tripA.matchedUserId = match.userB;
       tripA.matchId = match._id;
       await tripA.save();
@@ -149,7 +149,7 @@ router.put('/:id/accept', auth, async (req, res) => {
 
     if (tripB) {
       tripB.status = 'ACCEPTED';
-      tripB.matchedTripId = tripA._id;
+      tripB.matchedTripId = tripA?._id || match.tripA;
       tripB.matchedUserId = match.userA;
       tripB.matchId = match._id;
       await tripB.save();

@@ -192,11 +192,14 @@ router.put('/:id/status', auth, async (req, res) => {
 
     // Status transition validation
     const validTransitions = {
-      POSTED: ['MATCHED', 'CANCELLED'],
-      MATCHED: ['ACCEPTED', 'CANCELLED'],
-      ACCEPTED: ['VERIFYING', 'CANCELLED'],
+      POSTED: ['MATCHED', 'ACCEPTED', 'VERIFYING', 'IN_PROGRESS', 'CANCELLED'],
+      MATCHED: ['ACCEPTED', 'VERIFYING', 'IN_PROGRESS', 'CANCELLED'],
+      ACCEPTED: ['VERIFYING', 'IN_PROGRESS', 'CANCELLED'],
       VERIFYING: ['IN_PROGRESS', 'CANCELLED'],
       IN_PROGRESS: ['COMPLETED', 'NO_SHOW', 'CANCELLED'],
+      COMPLETED: [],
+      CANCELLED: [],
+      NO_SHOW: [],
     };
 
     if (!validTransitions[trip.status]?.includes(status)) {

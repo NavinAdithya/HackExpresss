@@ -40,7 +40,7 @@ async function verifyFace(userId, imageData) {
  * @returns {boolean}
  */
 function bothPartiesVerified(trip, matchedTrip) {
-  if (process.env.NODE_ENV === 'development' || !process.env.MONGODB_URI) {
+  if (!matchedTrip) {
     return trip?.faceVerificationStatus === 'VERIFIED';
   }
   return (

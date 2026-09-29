@@ -31,6 +31,8 @@ const contactRoutes = require('./routes/contacts');
 const analyticsRoutes = require('./routes/analytics');
 
 const app = express();
+app.set('trust proxy', 1); // Enable proxy header trusting for Vercel
+
 const server = http.createServer(app);
 
 // Determine allowed CORS origin
@@ -63,13 +65,20 @@ app.use(morgan('dev'));
 
 // Ensure database connection is initialized for serverless invocations
 let dbInitPromise = null;
-app.use(async (req, res, next) => {
+const initDatabase = () => {
   if (!dbInitPromise) {
     dbInitPromise = connectDB().catch((err) => {
       console.error('[DB] Connection error:', err);
     });
   }
-  await dbInitPromise;
+  return dbInitPromise;
+};
+
+// Start initialization immediately
+initDatabase();
+
+app.use(async (req, res, next) => {
+  await initDatabase();
   next();
 });
 
@@ -104,7 +113,7 @@ setupSockets(io);
 const PORT = process.env.PORT || 5000;
 
 async function start() {
-  await connectDB();
+  await initDatabase();
 
   // Initialize Redis (non-blocking)
   try {

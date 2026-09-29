@@ -59,11 +59,9 @@ export function ActiveTripPage() {
     if (!tripId) return;
     setFaceStatus('verifying');
     try {
-      const result = await verifyFace(tripId);
-      setFaceStatus(result.bothVerified ? 'both' : 'verified');
-      if (result.bothVerified) {
-        await startTrip();
-      }
+      await verifyFace(tripId);
+      setFaceStatus('both');
+      await startTrip();
     } catch {
       setFaceStatus('pending');
     }
@@ -188,87 +186,83 @@ export function ActiveTripPage() {
 
         {/* Bottom Panel */}
         <div style={{ padding: '24px 16px' }}>
-          <AnimatePresence mode="wait">
-            {step === 'verify' ? (
-              <motion.div
-                key="verify"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-              >
-                <FadeReveal>
-                  <GlassSurface style={{ padding: '32px', textAlign: 'center' }}>
-                    <p style={{ fontSize: '3rem', marginBottom: '16px' }}>🤳</p>
-                    <h2 style={{ fontWeight: 700, fontSize: '1.25rem', marginBottom: '8px' }}>
-                      Face Verification
-                    </h2>
-                    <p style={{ color: theme.muted, fontSize: '0.8125rem', marginBottom: '24px' }}>
-                      Both parties must verify before starting the trip
-                    </p>
+          {step === 'verify' ? (
+            <motion.div
+              key="verify"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <GlassSurface style={{ padding: '32px', textAlign: 'center' }}>
+                <p style={{ fontSize: '3rem', marginBottom: '16px' }}>🤳</p>
+                <h2 style={{ fontWeight: 700, fontSize: '1.25rem', marginBottom: '8px' }}>
+                  Face Verification
+                </h2>
+                <p style={{ color: theme.muted, fontSize: '0.8125rem', marginBottom: '24px' }}>
+                  Both parties must verify before starting the trip
+                </p>
 
-                    {faceStatus === 'verified' && (
-                      <GlassPill color={theme.success} className="" >
-                        ✓ Your face verified — waiting for partner
-                      </GlassPill>
-                    )}
+                {faceStatus === 'verified' && (
+                  <GlassPill color={theme.success} className="">
+                    ✓ Your face verified — waiting for partner
+                  </GlassPill>
+                )}
 
-                    <GlassButton
-                      fullWidth
-                      size="lg"
-                      loading={faceStatus === 'verifying'}
-                      disabled={faceStatus === 'verified' || faceStatus === 'both'}
-                      onClick={handleFaceVerify}
-                      style={{ marginTop: '16px' }}
-                    >
-                      {faceStatus === 'pending' ? '📸 Verify My Face' :
-                       faceStatus === 'verifying' ? 'Verifying...' :
-                       '✓ Verified'}
-                    </GlassButton>
-
-                    {/* MOCKED label */}
-                    <p style={{ fontSize: '0.625rem', color: theme.muted, marginTop: '12px' }}>
-                      MOCKED FOR DEMO: Tap to simulate verification
-                    </p>
-                  </GlassSurface>
-                </FadeReveal>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="tracking"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
-              >
-                {/* Share button */}
-                <GlassButton variant="secondary" fullWidth onClick={handleShare}>
-                  📍 Share Trip with Contacts
+                <GlassButton
+                  fullWidth
+                  size="lg"
+                  loading={faceStatus === 'verifying'}
+                  disabled={faceStatus === 'verified' || faceStatus === 'both'}
+                  onClick={handleFaceVerify}
+                  style={{ marginTop: '16px' }}
+                >
+                  {faceStatus === 'pending' ? '📸 Verify My Face' :
+                   faceStatus === 'verifying' ? 'Verifying...' :
+                   '✓ Verified'}
                 </GlassButton>
 
-                {/* Complete button */}
-                <GlassButton fullWidth size="lg" onClick={handleComplete}>
-                  ✓ Complete Trip
-                </GlassButton>
+                {/* MOCKED label */}
+                <p style={{ fontSize: '0.625rem', color: theme.muted, marginTop: '12px' }}>
+                  MOCKED FOR DEMO: Tap to simulate verification
+                </p>
+              </GlassSurface>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="tracking"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+            >
+              {/* Share button */}
+              <GlassButton variant="secondary" fullWidth onClick={handleShare}>
+                📍 Share Trip with Contacts
+              </GlassButton>
 
-                {/* SOS */}
-                <motion.div style={{ marginTop: '8px' }}>
-                  <GlassButton
-                    variant="danger"
-                    fullWidth
-                    size="lg"
-                    onClick={handleSOS}
-                    disabled={sosActive}
-                    style={{
-                      background: sosActive ? '#660020' : theme.danger,
-                      boxShadow: sosActive ? `0 0 30px ${theme.danger}60` : 'none',
-                    }}
-                  >
-                    {sosActive ? '🚨 SOS ACTIVE — Help is on the way' : '🆘 Emergency SOS'}
-                  </GlassButton>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              {/* Complete button */}
+              <GlassButton fullWidth size="lg" onClick={handleComplete}>
+                ✓ Complete Trip
+              </GlassButton>
+
+              {/* SOS */}
+              <div style={{ marginTop: '8px' }}>
+                <GlassButton
+                  variant="danger"
+                  fullWidth
+                  size="lg"
+                  onClick={handleSOS}
+                  disabled={sosActive}
+                  style={{
+                    background: sosActive ? '#660020' : theme.danger,
+                    boxShadow: sosActive ? `0 0 30px ${theme.danger}60` : 'none',
+                  }}
+                >
+                  {sosActive ? '🚨 SOS ACTIVE — Help is on the way' : '🆘 Emergency SOS'}
+                </GlassButton>
+              </div>
+            </motion.div>
+          )}
         </div>
       </div>
     </PageTransition>
