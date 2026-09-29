@@ -1,0 +1,62 @@
+/**
+ * RouteNetwork — 3D connected route curves with glowing animation
+ */
+
+import { useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
+
+export function RouteNetwork() {
+  const groupRef = useRef<THREE.Group>(null!);
+
+  // Generate 3 curved routes using tubes for glowing 3D thickness
+  const routes = useMemo(() => {
+    const curves = [
+      new THREE.CubicBezierCurve3(
+        new THREE.Vector3(-4, -1, -2),
+        new THREE.Vector3(-1.5, 2, 0),
+        new THREE.Vector3(1, -1.5, 1),
+        new THREE.Vector3(4, 1.2, -1)
+      ),
+      new THREE.CubicBezierCurve3(
+        new THREE.Vector3(-3.5, 1.5, 1),
+        new THREE.Vector3(-1, -1, 2),
+        new THREE.Vector3(2, 2, 0),
+        new THREE.Vector3(3.5, -1, -2)
+      ),
+      new THREE.CubicBezierCurve3(
+        new THREE.Vector3(-2, -2, 0),
+        new THREE.Vector3(0, 0, 1.5),
+        new THREE.Vector3(1, -0.5, -1.5),
+        new THREE.Vector3(3, 2, 1)
+      ),
+    ];
+
+    return curves.map((curve, idx) => {
+      const geometry = new THREE.TubeGeometry(curve, 64, 0.025, 8, false);
+      const color = idx % 2 === 0 ? '#00f2fe' : '#9b51e0';
+      return { geometry, color };
+    });
+  }, []);
+
+  useFrame((state) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.2) * 0.15;
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      {routes.map((route, i) => (
+        <mesh key={i} geometry={route.geometry}>
+          <meshBasicMaterial
+            color={route.color}
+            transparent
+            opacity={0.7}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}

@@ -1,0 +1,17 @@
+{
+  "name": "popo",
+  "version": "1.0.0",
+  "description": "PO → PO — AI-Assisted Peer-to-Peer Ride-Sharing Platform",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "install:all": "cd server && npm install && cd ../client && npm install",
+    "seed": "cd server && node seed.js",
+    "test": "cd server && npm test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "concurrently": "^8.2.2"
+  }
+}
