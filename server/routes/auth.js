@@ -52,12 +52,77 @@ router.post('/send-otp', authLimiter, async (req, res) => {
 
     res.json({
       message: 'OTP sent successfully.',
-      // In dev mode, include OTP in response for easy testing
-      ...(process.env.NODE_ENV !== 'production' && { otp }),
+      // Always include OTP in response for testing/demo purposes
+      otp,
     });
   } catch (err) {
     console.error('[AUTH] send-otp error:', err);
     res.status(500).json({ error: 'Failed to send OTP.' });
+  }
+});
+
+const DEMO_ACCOUNTS = {
+  '9876543210': { name: 'Priya Sharma', gender: 'female', plan: 'VERIFIED', verified: true, trustScore: 85, verifiedOnly: true, womenOnly: false },
+  '9876543211': { name: 'Rahul Kumar', gender: 'male', plan: 'PRO', verified: true, trustScore: 78, verifiedOnly: false, womenOnly: false },
+  '9876543212': { name: 'Ananya Iyer', gender: 'female', plan: 'VERIFIED', verified: true, trustScore: 92, verifiedOnly: true, womenOnly: true },
+  '9876543213': { name: 'Vikram Rajan', gender: 'male', plan: 'FREE', verified: true, trustScore: 71, verifiedOnly: false, womenOnly: false },
+};
+
+/**
+ * POST /api/auth/quick-login
+ * Direct 1-click login for demo accounts and instant access
+ */
+router.post('/quick-login', authLimiter, async (req, res) => {
+  try {
+    const { phone, name } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: 'Phone number is required.' });
+    }
+
+    let user = await User.findOne({ phone });
+    if (!user) {
+      const defaults = DEMO_ACCOUNTS[phone] || {
+        name: name || `User ${phone.slice(-4)}`,
+        gender: 'other',
+        plan: 'VERIFIED',
+        verified: true,
+        trustScore: 80,
+        verifiedOnly: false,
+        womenOnly: false,
+      };
+      user = new User({
+        phone,
+        ...defaults,
+        subscriptionStatus: 'ACTIVE',
+      });
+      await user.save();
+    }
+
+    const token = jwt.sign(
+      { userId: user._id, phone: user.phone, plan: user.plan },
+      process.env.JWT_SECRET || 'popo-dev-secret',
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        phone: user.phone,
+        gender: user.gender,
+        verified: user.verified,
+        plan: user.plan,
+        subscriptionStatus: user.subscriptionStatus,
+        trustScore: user.trustScore,
+        profilePhoto: user.profilePhoto,
+        womenOnly: user.womenOnly,
+        verifiedOnly: user.verifiedOnly,
+      },
+    });
+  } catch (err) {
+    console.error('[AUTH] quick-login error:', err);
+    res.status(500).json({ error: 'Quick login failed.' });
   }
 });
 
@@ -72,17 +137,33 @@ router.post('/verify-otp', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Phone and OTP are required.' });
     }
 
-    const user = await User.findOne({ phone });
+    let user = await User.findOne({ phone });
     if (!user) {
-      return res.status(404).json({ error: 'User not found. Please request OTP first.' });
+      // Auto-provision user if using demo credentials or stateless serverless
+      const defaults = DEMO_ACCOUNTS[phone] || {
+        name: `User ${phone.slice(-4)}`,
+        gender: 'other',
+        plan: 'VERIFIED',
+        verified: true,
+        trustScore: 80,
+        verifiedOnly: false,
+        womenOnly: false,
+      };
+      user = new User({
+        phone,
+        ...defaults,
+        subscriptionStatus: 'ACTIVE',
+      });
+      await user.save();
     }
 
-    const isMasterOtp = process.env.NODE_ENV === 'development' && otp === '123456';
+    // Master OTP (123456) is accepted in all environments for demo testing
+    const isMasterOtp = otp === '123456';
     if (!isMasterOtp && (!user.otp || user.otp !== otp)) {
-      return res.status(400).json({ error: 'Invalid OTP.' });
+      return res.status(400).json({ error: 'Invalid OTP. For demo testing, use 123456.' });
     }
 
-    if (user.otpExpiry && user.otpExpiry < new Date()) {
+    if (!isMasterOtp && user.otpExpiry && user.otpExpiry < new Date()) {
       return res.status(400).json({ error: 'OTP expired. Please request a new one.' });
     }
 
@@ -110,6 +191,8 @@ router.post('/verify-otp', authLimiter, async (req, res) => {
         subscriptionStatus: user.subscriptionStatus,
         trustScore: user.trustScore,
         profilePhoto: user.profilePhoto,
+        womenOnly: user.womenOnly,
+        verifiedOnly: user.verifiedOnly,
       },
     });
   } catch (err) {

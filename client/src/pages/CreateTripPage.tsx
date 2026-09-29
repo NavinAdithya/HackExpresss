@@ -246,7 +246,7 @@ export function CreateTripPage() {
                 style={{ accentColor: theme.secondary, width: '18px', height: '18px' }}
               />
               <span style={{ fontSize: '0.875rem', color: theme.foreground }}>
-                👩 Women-only pool
+                👩 Women-only preference (Match only women {role === 'driver' ? 'passengers' : 'drivers'})
               </span>
             </label>
           </GlassSurface>

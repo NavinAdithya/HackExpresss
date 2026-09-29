@@ -39,6 +39,8 @@ export const authAPI = {
     api.post('/auth/send-otp', { phone, name }),
   verifyOTP: (phone: string, otp: string) =>
     api.post('/auth/verify-otp', { phone, otp }),
+  quickLogin: (phone: string, name?: string) =>
+    api.post('/auth/quick-login', { phone, name }),
   getMe: () => api.get('/auth/me'),
   updateProfile: (data: Record<string, unknown>) =>
     api.put('/auth/profile', data),

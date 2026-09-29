@@ -319,6 +319,15 @@ function setupInMemoryFallback() {
   seedInitialData();
 
   const mongoose = require('mongoose');
+  mongoose.set('bufferCommands', false);
+
+  // Explicitly require all models so their schemas are registered with Mongoose
+  require('../models/User');
+  require('../models/Trip');
+  require('../models/Match');
+  require('../models/Rating');
+  require('../models/SOSAlert');
+  require('../models/Penalty');
 
   const models = [
     { name: 'User', coll: 'users' },

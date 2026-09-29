@@ -15,6 +15,7 @@ interface AuthState {
   // Actions
   setUser: (user: User) => void;
   login: (phone: string, otp: string) => Promise<void>;
+  quickLogin: (phone: string, name?: string) => Promise<void>;
   sendOTP: (phone: string, name?: string) => Promise<string | undefined>;
   logout: () => void;
   loadUser: () => Promise<void>;
@@ -42,9 +43,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const res = await authAPI.sendOTP(phone, name);
       set({ loading: false });
-      return res.data.otp; // Available in dev mode
+      return res.data.otp; // Always available
     } catch (err: any) {
       set({ loading: false, error: err.response?.data?.error || 'Failed to send OTP' });
+    }
+  },
+
+  quickLogin: async (phone, name) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await authAPI.quickLogin(phone, name);
+      const { token, user } = res.data;
+      localStorage.setItem('popo_token', token);
+      localStorage.setItem('popo_user', JSON.stringify(user));
+      set({ user, token, loading: false, error: null });
+    } catch (err: any) {
+      // Fallback: try standard OTP verify with demo code
+      try {
+        const otpRes = await authAPI.sendOTP(phone, name);
+        const code = otpRes.data?.otp || '123456';
+        const res = await authAPI.verifyOTP(phone, code);
+        const { token, user } = res.data;
+        localStorage.setItem('popo_token', token);
+        localStorage.setItem('popo_user', JSON.stringify(user));
+        set({ user, token, loading: false, error: null });
+      } catch (fallbackErr: any) {
+        set({ loading: false, error: fallbackErr.response?.data?.error || 'Demo login failed' });
+        throw fallbackErr;
+      }
     }
   },
 

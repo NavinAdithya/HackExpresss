@@ -289,12 +289,24 @@ router.put('/:id/verify-face', auth, async (req, res) => {
       });
     }
 
+    // In demo / development mode: auto-verify partner trip to enable live ride flow
+    if (trip.matchedTripId && (process.env.NODE_ENV === 'development' || !process.env.MONGODB_URI)) {
+      const partnerTrip = await Trip.findById(trip.matchedTripId);
+      if (partnerTrip) {
+        partnerTrip.faceVerificationStatus = 'VERIFIED';
+        await partnerTrip.save();
+      }
+    }
+
     // Check if both are now verified
     let bothVerified = false;
     if (trip.matchedTripId) {
       const matchedTrip = await Trip.findById(trip.matchedTripId);
       const updatedTrip = await Trip.findById(trip._id);
       bothVerified = bothPartiesVerified(updatedTrip, matchedTrip);
+    }
+    if (result.verified && (process.env.NODE_ENV === 'development' || !process.env.MONGODB_URI)) {
+      bothVerified = true;
     }
 
     res.json({

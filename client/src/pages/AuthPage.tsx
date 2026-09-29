@@ -14,7 +14,7 @@ import { theme } from '../theme';
 
 export function AuthPage() {
   const navigate = useNavigate();
-  const { user, sendOTP, login, loading, error } = useAuthStore();
+  const { user, sendOTP, login, quickLogin, loading, error } = useAuthStore();
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
@@ -28,13 +28,13 @@ export function AuthPage() {
   const handleSendOTP = async () => {
     if (phone.length < 10) return;
     const devOtp = await sendOTP(phone, name || undefined);
-    if (devOtp) setSentOtp(devOtp);
+    setSentOtp(devOtp || '123456');
     setStep('otp');
   };
 
   const handleVerifyOTP = async () => {
     try {
-      await login(phone, otp);
+      await login(phone, otp || '123456');
       navigate('/', { replace: true });
     } catch { /* error shown via store */ }
   };
@@ -43,11 +43,9 @@ export function AuthPage() {
     try {
       setPhone(demoPhone);
       setName(demoName);
-      const devOtp = await sendOTP(demoPhone, demoName);
-      const code = devOtp || '123456';
-      await login(demoPhone, code);
+      await quickLogin(demoPhone, demoName);
       navigate('/', { replace: true });
-    } catch { /* handled */ }
+    } catch { /* handled via store */ }
   };
 
   return (
@@ -166,7 +164,7 @@ export function AuthPage() {
                             cursor: 'pointer',
                           }}
                         >
-                          <span>⚡ <strong>Rahul Kumar</strong> (Pro Driver)</span>
+                          <span>⚡ <strong>Rahul Kumar</strong> (Verified Driver)</span>
                           <span style={{ color: theme.secondary, fontSize: '0.75rem', fontWeight: 600 }}>Log In →</span>
                         </button>
                         <button
@@ -185,7 +183,7 @@ export function AuthPage() {
                             cursor: 'pointer',
                           }}
                         >
-                          <span>👩 <strong>Ananya Iyer</strong> (Women-Only Verified)</span>
+                          <span>👩 <strong>Ananya Iyer</strong> (Women-Only Pool Preference)</span>
                           <span style={{ color: theme.accent, fontSize: '0.75rem', fontWeight: 600 }}>Log In →</span>
                         </button>
                       </div>
@@ -213,19 +211,17 @@ export function AuthPage() {
                   <p style={{ color: theme.muted, fontSize: '0.875rem', marginBottom: '8px' }}>
                     Enter the code sent to +91 {phone}
                   </p>
-                  {sentOtp && (
-                    <p style={{
-                      color: theme.warning,
-                      fontSize: '0.75rem',
-                      marginBottom: '20px',
-                      padding: '8px 12px',
-                      background: `${theme.warning}10`,
-                      borderRadius: theme.radiusSm,
-                      border: `1px solid ${theme.warning}30`,
-                    }}>
-                      🔐 Dev OTP: <strong>{sentOtp}</strong>
-                    </p>
-                  )}
+                  <p style={{
+                    color: theme.warning,
+                    fontSize: '0.75rem',
+                    marginBottom: '20px',
+                    padding: '8px 12px',
+                    background: `${theme.warning}10`,
+                    borderRadius: theme.radiusSm,
+                    border: `1px solid ${theme.warning}30`,
+                  }}>
+                    🔐 Demo OTP: <strong>{sentOtp || '123456'}</strong> (or enter <strong>123456</strong>)
+                  </p>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <GlassInput
