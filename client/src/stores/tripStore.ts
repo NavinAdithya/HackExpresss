@@ -40,9 +40,9 @@ export const useTripStore = create<TripState>((set, get) => ({
     set({ loading: true });
     try {
       const res = await tripAPI.list(params);
-      set({ trips: res.data.trips, loading: false });
+      set({ trips: Array.isArray(res.data?.trips) ? res.data.trips : [], loading: false });
     } catch (err: any) {
-      set({ loading: false, error: err.response?.data?.error });
+      set({ trips: [], loading: false, error: err.response?.data?.error });
     }
   },
 

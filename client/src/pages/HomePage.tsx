@@ -18,15 +18,16 @@ import type { Trip } from '../types';
 export function HomePage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
-  const { trips, fetchTrips } = useTripStore();
+  const { trips = [], fetchTrips } = useTripStore();
   const [role, setRole] = useState<'passenger' | 'driver'>('passenger');
 
   useEffect(() => {
     fetchTrips({ limit: '5' });
   }, []);
 
-  const activeTrip = trips.find((t) => ['ACCEPTED', 'VERIFYING', 'IN_PROGRESS'].includes(t.status));
-  const upcomingTrips = trips.filter((t) => t.status === 'POSTED').slice(0, 3);
+  const safeTrips = Array.isArray(trips) ? trips : [];
+  const activeTrip = safeTrips.find((t) => ['ACCEPTED', 'VERIFYING', 'IN_PROGRESS'].includes(t.status));
+  const upcomingTrips = safeTrips.filter((t) => t.status === 'POSTED').slice(0, 3);
 
   if (!user) return null;
 

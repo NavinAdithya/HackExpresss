@@ -32,17 +32,29 @@ router.post('/find/:tripId', auth, async (req, res) => {
     const oppositeRole = trip.role === 'driver' ? 'passenger' : 'driver';
     const timeRange = new Date(trip.departureTime);
     const timeWindowMs = (trip.timeWindow || 30) * 60 * 1000;
+    const isDev = process.env.NODE_ENV === 'development';
+    const windowMultiplier = isDev ? 24 : 2;
 
-    const candidateTrips = await Trip.find({
+    let candidateTrips = await Trip.find({
       _id: { $ne: trip._id },
       userId: { $ne: req.userId },
       role: oppositeRole,
       status: 'POSTED',
       departureTime: {
-        $gte: new Date(timeRange.getTime() - timeWindowMs * 2),
-        $lte: new Date(timeRange.getTime() + timeWindowMs * 2),
+        $gte: new Date(timeRange.getTime() - timeWindowMs * windowMultiplier),
+        $lte: new Date(timeRange.getTime() + timeWindowMs * windowMultiplier),
       },
     }).limit(50);
+
+    // Development/demo fallback: find any posted opposite role trips
+    if (candidateTrips.length === 0 && isDev) {
+      candidateTrips = await Trip.find({
+        _id: { $ne: trip._id },
+        userId: { $ne: req.userId },
+        role: oppositeRole,
+        status: 'POSTED',
+      }).limit(50);
+    }
 
     if (candidateTrips.length === 0) {
       return res.json({ matches: [], message: 'No rides found nearby. Try expanding your time window.' });

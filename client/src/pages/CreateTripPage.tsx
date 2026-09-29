@@ -39,8 +39,13 @@ export function CreateTripPage() {
   const [originCoords, setOriginCoords] = useState<[number, number] | null>(null);
   const [destination, setDestination] = useState('');
   const [destCoords, setDestCoords] = useState<[number, number] | null>(null);
+  const toLocalDatetimeString = (date: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
   const [departureTime, setDepartureTime] = useState(
-    new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16)
+    toLocalDatetimeString(new Date(Date.now() + 60 * 60 * 1000))
   );
   const [seats, setSeats] = useState(role === 'driver' ? 3 : 1);
   const [budgetMin, setBudgetMin] = useState(20);

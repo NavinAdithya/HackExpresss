@@ -29,6 +29,8 @@ export function TripsPage() {
     fetchTrips({ limit: '50' });
   }, []);
 
+  const safeTrips = Array.isArray(trips) ? trips : [];
+
   return (
     <PageTransition>
       <div style={{ padding: '24px 16px', maxWidth: '600px', margin: '0 auto' }}>
@@ -43,7 +45,7 @@ export function TripsPage() {
           </h1>
         </FadeReveal>
 
-        {trips.length === 0 && !loading ? (
+        {safeTrips.length === 0 && !loading ? (
           <FadeReveal>
             <GlassSurface style={{ padding: '48px', textAlign: 'center' }}>
               <p style={{ fontSize: '2.5rem', marginBottom: '16px' }}>🛣️</p>
@@ -58,7 +60,7 @@ export function TripsPage() {
           </FadeReveal>
         ) : (
           <StaggerContainer style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {trips.map((trip) => (
+            {safeTrips.map((trip) => (
               <StaggerItem key={trip._id}>
                 <motion.div
                   whileTap={{ scale: 0.98 }}
