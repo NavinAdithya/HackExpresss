@@ -12,6 +12,7 @@ const User = require('./models/User');
 const Trip = require('./models/Trip');
 const Rating = require('./models/Rating');
 const { calculateRoute } = require('./services/route-service');
+const { computeUserTrustScore } = require('./services/trust-score');
 
 // Real Chennai locations
 const CHENNAI = {
@@ -33,7 +34,7 @@ const SEED_USERS = [
     phone: '9876543210',
     gender: 'female',
     verified: true,
-    trustScore: 85,
+    driverStatus: 'APPROVED',
     plan: 'VERIFIED',
     subscriptionStatus: 'ACTIVE',
     womenOnly: false,
@@ -48,7 +49,7 @@ const SEED_USERS = [
     phone: '9876543211',
     gender: 'male',
     verified: true,
-    trustScore: 78,
+    driverStatus: 'APPROVED',
     plan: 'PRO',
     subscriptionStatus: 'ACTIVE',
     womenOnly: false,
@@ -62,7 +63,7 @@ const SEED_USERS = [
     phone: '9876543212',
     gender: 'female',
     verified: true,
-    trustScore: 92,
+    driverStatus: 'NOT_REQUESTED',
     plan: 'VERIFIED',
     subscriptionStatus: 'ACTIVE',
     womenOnly: true,
@@ -77,7 +78,7 @@ const SEED_USERS = [
     phone: '9876543213',
     gender: 'male',
     verified: true,
-    trustScore: 71,
+    driverStatus: 'APPROVED',
     plan: 'FREE',
     subscriptionStatus: 'FREE',
     womenOnly: false,
@@ -89,7 +90,7 @@ const SEED_USERS = [
     phone: '9876543214',
     gender: 'female',
     verified: false,
-    trustScore: 50,
+    driverStatus: 'NOT_REQUESTED',
     plan: 'FREE',
     subscriptionStatus: 'FREE',
     womenOnly: false,
@@ -103,7 +104,7 @@ const SEED_USERS = [
     phone: '9876543215',
     gender: 'male',
     verified: true,
-    trustScore: 88,
+    driverStatus: 'APPROVED',
     plan: 'PRO',
     subscriptionStatus: 'ACTIVE',
     womenOnly: false,
@@ -274,6 +275,12 @@ async function seed() {
     });
 
     console.log('  ✓ Created sample ratings');
+
+    // Recompute authoritative deterministic trust scores from seeded activity
+    for (const u of users) {
+      const res = await computeUserTrustScore(u._id);
+      console.log(`  ✓ Trust score computed: ${u.name} → ${res.score}/100 (${res.tier})`);
+    }
 
     console.log('\n╔══════════════════════════════════════════╗');
     console.log('║  🌱 Seed complete!                        ║');

@@ -1,66 +1,83 @@
 /**
- * PO → PO Design Tokens
- * Central theme configuration — all visual systems derive from these tokens.
- * Single cohesive dark theme with electric cyan/violet accents.
- * NO LIGHT/DARK MODE TOGGLE.
+ * PO → PO Design Tokens — Master Specification
+ *
+ * Official Palette (Section 56):
+ * #F63B03 — Primary Orange
+ * #F73C06 — Bright Orange
+ * #FFF8E5 — Cream
+ * #FBF6E2 — Light Cream
+ * #FFFFFF — White
+ * #E79E89 — Dust Pink
+ * #0A0A0A — Black
+ * #4F1409 — Dark Brown
+ *
+ * One permanent PO → PO theme. No light/dark mode toggle.
+ * No unrelated blue/purple/cyan primary colors.
  */
 
 export const theme = {
-  // Base
-  background: '#06060C',
-  foreground: '#FFFFFF',
-  backgroundAlt: '#0C0C16',
+  // Base & Background
+  background: '#0A0A0A',
+  foreground: '#FFF8E5',
+  backgroundAlt: '#140D0B',
+  darkBrown: '#4F1409',
+  cream: '#FFF8E5',
+  lightCream: '#FBF6E2',
+  white: '#FFFFFF',
+  dustPink: '#E79E89',
 
-  // Brand
-  primary: '#00D4FF',       // Electric cyan
-  secondary: '#7B61FF',     // Vivid violet
-  accent: '#00FFA3',        // Iridescent green
-  brand: '#00D4FF',
+  // Official Brand Primary & Accents
+  primary: '#F63B03',        // Primary Orange
+  primaryBright: '#F73C06',  // Bright Orange
+  secondary: '#E79E89',      // Dust Pink
+  accent: '#F63B03',
+  brand: '#F63B03',
 
-  // Glass
-  glassTint: 'rgba(255, 255, 255, 0.05)',
-  glassBorder: 'rgba(255, 255, 255, 0.10)',
-  glassHighlight: 'rgba(255, 255, 255, 0.15)',
-  glassOverlay: 'rgba(6, 6, 12, 0.6)',
+  // Glass System (Warm glass tint & highlight based on cream & orange)
+  glassTint: 'rgba(255, 248, 229, 0.05)',
+  glassBorder: 'rgba(255, 248, 229, 0.12)',
+  glassHighlight: 'rgba(246, 59, 3, 0.25)',
+  glassOverlay: 'rgba(10, 10, 10, 0.75)',
 
   // Semantic
-  success: '#00FFA3',
-  warning: '#FFB800',
-  danger: '#FF3B5C',
-  emergency: '#FF0040',
-  muted: 'rgba(255, 255, 255, 0.4)',
-  mutedLight: 'rgba(255, 255, 255, 0.6)',
+  success: '#22C55E',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  emergency: '#F63B03',
+  muted: 'rgba(255, 248, 229, 0.50)',
+  mutedLight: 'rgba(255, 248, 229, 0.75)',
 
   // Surfaces
-  surface: 'rgba(255, 255, 255, 0.03)',
-  surfaceElevated: 'rgba(255, 255, 255, 0.06)',
-  surfaceHover: 'rgba(255, 255, 255, 0.08)',
+  surface: 'rgba(255, 248, 229, 0.04)',
+  surfaceElevated: 'rgba(255, 248, 229, 0.08)',
+  surfaceHover: 'rgba(246, 59, 3, 0.12)',
 
   // Gradients
-  gradientPrimary: 'linear-gradient(135deg, #00D4FF 0%, #7B61FF 100%)',
-  gradientAccent: 'linear-gradient(135deg, #7B61FF 0%, #FF61D8 100%)',
-  gradientSurface: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
-  gradientHero: 'linear-gradient(135deg, #00D4FF 0%, #7B61FF 50%, #FF61D8 100%)',
+  gradientPrimary: 'linear-gradient(135deg, #F63B03 0%, #F73C06 50%, #E79E89 100%)',
+  gradientAccent: 'linear-gradient(135deg, #F63B03 0%, #4F1409 100%)',
+  gradientSurface: 'linear-gradient(180deg, rgba(255, 248, 229, 0.08) 0%, rgba(255, 248, 229, 0.02) 100%)',
+  gradientHero: 'linear-gradient(135deg, #F63B03 0%, #F73C06 40%, #E79E89 80%, #FFF8E5 100%)',
 
-  // Plan colors
-  planFree: '#00D4FF',
-  planVerified: '#7B61FF',
-  planPro: '#FFB800',
+  // Plan Colors
+  planFree: '#FFF8E5',
+  planVerified: '#E79E89',
+  planPro: '#F63B03',
 
   // Shadows
-  shadowSm: '0 2px 8px rgba(0, 0, 0, 0.3)',
-  shadowMd: '0 4px 16px rgba(0, 0, 0, 0.4)',
-  shadowLg: '0 8px 32px rgba(0, 0, 0, 0.5)',
-  shadowGlow: '0 0 20px rgba(0, 212, 255, 0.15)',
+  shadowSm: '0 2px 8px rgba(0, 0, 0, 0.5)',
+  shadowMd: '0 4px 16px rgba(0, 0, 0, 0.6)',
+  shadowLg: '0 8px 32px rgba(0, 0, 0, 0.7)',
+  shadowGlow: '0 0 24px rgba(246, 59, 3, 0.25)',
+  shadowOrange: '0 8px 24px rgba(246, 59, 3, 0.35)',
 
-  // Border radius
+  // Border Radius
   radiusSm: '8px',
   radiusMd: '12px',
   radiusLg: '20px',
   radiusXl: '28px',
   radiusFull: '9999px',
 
-  // Spacing scale
+  // Spacing Scale
   space: {
     xs: '4px',
     sm: '8px',
@@ -71,7 +88,7 @@ export const theme = {
     xxxl: '64px',
   },
 
-  // Z-index scale
+  // Z-Index Scale
   z: {
     base: 0,
     content: 10,

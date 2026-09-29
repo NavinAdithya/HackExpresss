@@ -1,7 +1,9 @@
 /**
  * PO → PO Logo Component
- * Centralized so the final logo can be replaced later without changing the application.
- * Uses typography + custom symbol.
+ * Master Specification
+ *
+ * PRODUCT: PO → PO
+ * STATEMENT: "Don't book a ride. Find someone already going your way."
  */
 
 import { motion } from 'framer-motion';
@@ -15,10 +17,10 @@ interface LogoProps {
 }
 
 const sizes = {
-  sm: { font: '1.25rem', arrow: '0.75rem' },
-  md: { font: '1.75rem', arrow: '1rem' },
-  lg: { font: '2.5rem', arrow: '1.5rem' },
-  xl: { font: '3.5rem', arrow: '2rem' },
+  sm: { font: '1.25rem', arrow: '0.85rem' },
+  md: { font: '1.75rem', arrow: '1.1rem' },
+  lg: { font: '2.5rem', arrow: '1.6rem' },
+  xl: { font: '3.5rem', arrow: '2.2rem' },
 };
 
 export function Logo({ size = 'md', showTagline = false, className = '', style }: LogoProps) {
@@ -35,26 +37,24 @@ export function Logo({ size = 'md', showTagline = false, className = '', style }
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '2px',
+        gap: '4px',
         fontFamily: "'Inter', sans-serif",
-        fontWeight: 700,
+        fontWeight: 800,
         fontSize: s.font,
         letterSpacing: '-0.03em',
-        color: theme.foreground,
+        color: theme.cream,
       }}>
         <span>PO</span>
         <motion.span
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '1px',
             fontSize: s.arrow,
-            background: theme.gradientPrimary,
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
+            color: theme.primary,
+            filter: 'drop-shadow(0 0 8px rgba(246, 59, 3, 0.7))',
             padding: '0 4px',
           }}
-          animate={{ x: [0, 3, 0] }}
+          animate={{ x: [0, 4, 0] }}
           transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
         >
           →
@@ -67,14 +67,14 @@ export function Logo({ size = 'md', showTagline = false, className = '', style }
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.5 }}
           style={{
-            fontSize: '0.625rem',
+            fontSize: '0.6875rem',
             fontWeight: 500,
-            letterSpacing: '0.15em',
-            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
             color: theme.muted,
+            textAlign: 'center',
           }}
         >
-          Move together
+          Don't book a ride. Find someone already going your way.
         </motion.span>
       )}
     </motion.div>

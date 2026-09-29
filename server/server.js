@@ -29,6 +29,7 @@ const sosRoutes = require('./routes/sos');
 const planRoutes = require('./routes/plans');
 const contactRoutes = require('./routes/contacts');
 const analyticsRoutes = require('./routes/analytics');
+const placesRoutes = require('./routes/places');
 
 const app = express();
 app.set('trust proxy', 1); // Enable proxy header trusting for Vercel
@@ -93,6 +94,7 @@ app.use('/api/sos', sosRoutes);
 app.use('/api/plans', planRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/places', placesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

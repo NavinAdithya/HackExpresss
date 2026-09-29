@@ -1,22 +1,29 @@
 /**
  * MapView — Leaflet map integrated into PO → PO visual identity
  *
- * - CartoDB Dark Matter tiles for a sleek dark aesthetic
- * - Custom glowing DivIcons for origin, destination, and live vehicles
- * - Glowing polyline with route geometry
- * - Smooth auto-fit bounds
- * - Floating glass status overlays
+ * - Dark CartoDB Dark Matter tiles
+ * - PO → PO Orange (#F63B03) glowing origin and route
+ * - Cream & Dark Brown destination pin
+ * - Nearby commuter markers (Bike / Car)
+ * - Auto-fit bounds
  */
 
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { theme } from '../theme';
 
+export interface NearbyCommuterMarker {
+  coords: [number, number]; // [lat, lng]
+  name: string;
+  transportMode: 'BIKE' | 'CAR';
+}
+
 interface MapViewProps {
   origin?: [number, number]; // [lat, lng]
   destination?: [number, number]; // [lat, lng]
   routeGeoJSON?: any;
   liveLocation?: [number, number] | null; // [lat, lng]
+  nearbyCommuters?: NearbyCommuterMarker[];
   height?: string;
   zoom?: number;
   interactive?: boolean;
@@ -28,6 +35,7 @@ export function MapView({
   destination,
   routeGeoJSON,
   liveLocation,
+  nearbyCommuters = [],
   height = '100%',
   zoom = 13,
   interactive = true,
@@ -36,6 +44,7 @@ export function MapView({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const routeLayerRef = useRef<L.GeoJSON | null>(null);
+  const nearbyLayersRef = useRef<L.LayerGroup | null>(null);
   const markersRef = useRef<{
     origin?: L.Marker;
     destination?: L.Marker;
@@ -58,21 +67,16 @@ export function MapView({
       attributionControl: false,
     });
 
-    // Public OpenStreetMap tiles — 100% free, zero API key required
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // Dark Matter tile layer
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap',
+      subdomains: 'abcd',
     }).addTo(map);
 
+    nearbyLayersRef.current = L.layerGroup().addTo(map);
     mapInstanceRef.current = map;
 
-    // Ensure map tiles layout properly on mount and resize
-    const timer = setTimeout(() => {
-      map.invalidateSize();
-    }, 200);
-
     return () => {
-      clearTimeout(timer);
       map.remove();
       mapInstanceRef.current = null;
     };
@@ -83,7 +87,7 @@ export function MapView({
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    // Origin Marker (Cyan A)
+    // Origin Marker (PO → PO Orange)
     if (origin) {
       if (markersRef.current.origin) {
         markersRef.current.origin.setLatLng(origin);
@@ -92,11 +96,11 @@ export function MapView({
           className: 'custom-map-icon',
           html: `
             <div style="
-              width: 32px;
-              height: 32px;
-              background: #00f2fe;
-              border: 2px solid #ffffff;
-              box-shadow: 0 0 16px #00f2fe, 0 0 24px rgba(0, 242, 254, 0.4);
+              width: 34px;
+              height: 34px;
+              background: #F63B03;
+              border: 2px solid #FFF8E5;
+              box-shadow: 0 0 16px rgba(246, 59, 3, 0.8), 0 0 24px rgba(246, 59, 3, 0.4);
               border-radius: 50%;
               display: flex;
               align-items: center;
@@ -104,17 +108,17 @@ export function MapView({
               font-family: 'Inter', sans-serif;
               font-weight: 800;
               font-size: 13px;
-              color: #06060c;
+              color: #FFF8E5;
             ">A</div>
           `,
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
         });
         markersRef.current.origin = L.marker(origin, { icon: originIcon }).addTo(map);
       }
     }
 
-    // Destination Marker (Violet B)
+    // Destination Marker (Cream & Dark Brown)
     if (destination) {
       if (markersRef.current.destination) {
         markersRef.current.destination.setLatLng(destination);
@@ -123,11 +127,11 @@ export function MapView({
           className: 'custom-map-icon',
           html: `
             <div style="
-              width: 32px;
-              height: 32px;
-              background: #7f00ff;
-              border: 2px solid #ffffff;
-              box-shadow: 0 0 16px #7f00ff, 0 0 24px rgba(127, 0, 255, 0.4);
+              width: 34px;
+              height: 34px;
+              background: #FFF8E5;
+              border: 2px solid #4F1409;
+              box-shadow: 0 0 16px rgba(255, 248, 229, 0.8), 0 0 24px rgba(246, 59, 3, 0.3);
               border-radius: 50%;
               display: flex;
               align-items: center;
@@ -135,11 +139,11 @@ export function MapView({
               font-family: 'Inter', sans-serif;
               font-weight: 800;
               font-size: 13px;
-              color: #ffffff;
+              color: #4F1409;
             ">B</div>
           `,
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
         });
         markersRef.current.destination = L.marker(destination, { icon: destIcon }).addTo(map);
       }
@@ -159,9 +163,9 @@ export function MapView({
     if (routeGeoJSON) {
       const geoLayer = L.geoJSON(routeGeoJSON, {
         style: {
-          color: '#00f2fe',
+          color: '#F63B03',
           weight: 5,
-          opacity: 0.9,
+          opacity: 0.95,
           lineCap: 'round',
           lineJoin: 'round',
         },
@@ -169,16 +173,62 @@ export function MapView({
 
       routeLayerRef.current = geoLayer;
 
-      // Fit bounds with smooth padding
       const bounds = geoLayer.getBounds();
       if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
       }
     } else if (origin && destination) {
+      // Connect straight line if no route geojson provided yet
+      const poly = L.polyline([origin, destination], {
+        color: '#F63B03',
+        weight: 4,
+        dashArray: '8, 8',
+        opacity: 0.8,
+      }).addTo(map);
+      routeLayerRef.current = poly as any;
       const bounds = L.latLngBounds([origin, destination]);
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+    } else if (origin) {
+      map.setView(origin, zoom);
     }
   }, [routeGeoJSON, origin, destination]);
+
+  // Update Nearby Commuter Markers
+  useEffect(() => {
+    const group = nearbyLayersRef.current;
+    if (!group) return;
+
+    group.clearLayers();
+
+    nearbyCommuters.forEach((c) => {
+      const iconHtml = `
+        <div style="
+          padding: 4px 8px;
+          background: rgba(10, 10, 10, 0.85);
+          border: 1.5px solid #F63B03;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 11px;
+          font-weight: 700;
+          color: #FFF8E5;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+          white-space: nowrap;
+        ">
+          <span>${c.transportMode === 'BIKE' ? '🏍️' : '🚗'}</span>
+          <span>${c.name}</span>
+        </div>
+      `;
+      const icon = L.divIcon({
+        className: 'nearby-commuter-marker',
+        html: iconHtml,
+        iconSize: [80, 24],
+        iconAnchor: [40, 12],
+      });
+      L.marker(c.coords, { icon }).addTo(group);
+    });
+  }, [nearbyCommuters]);
 
   // Update Live Location Marker
   useEffect(() => {
@@ -191,50 +241,34 @@ export function MapView({
       const liveIcon = L.divIcon({
         className: 'custom-map-icon',
         html: `
-          <div style="position: relative; width: 36px; height: 36px;">
-            <div style="
-              position: absolute;
-              inset: 0;
-              background: #00ffa3;
-              border-radius: 50%;
-              opacity: 0.4;
-              animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
-            "></div>
-            <div style="
-              position: absolute;
-              inset: 4px;
-              background: #00ffa3;
-              border: 3px solid #ffffff;
-              box-shadow: 0 0 16px #00ffa3;
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: #06060c;
-              font-size: 14px;
-            ">🚗</div>
-          </div>
+          <div style="
+            width: 22px;
+            height: 22px;
+            background: #F73C06;
+            border: 3px solid #FFFFFF;
+            border-radius: 50%;
+            box-shadow: 0 0 16px rgba(247, 60, 6, 0.9);
+          "></div>
         `,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
       });
-      markersRef.current.live = L.marker(liveLocation, { icon: liveIcon, zIndexOffset: 1000 }).addTo(map);
+      markersRef.current.live = L.marker(liveLocation, { icon: liveIcon }).addTo(map);
     }
   }, [liveLocation]);
 
   return (
     <div
+      ref={mapContainerRef}
+      className={className}
       style={{
-        position: 'relative',
         width: '100%',
         height,
-        borderRadius: '24px',
+        position: 'relative',
+        zIndex: 1,
+        borderRadius: theme.radiusMd,
         overflow: 'hidden',
-        border: `1px solid ${theme.glassBorder}`,
       }}
-      className={className}
-    >
-      <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
-    </div>
+    />
   );
 }

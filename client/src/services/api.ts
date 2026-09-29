@@ -42,8 +42,14 @@ export const authAPI = {
   quickLogin: (phone: string, name?: string) =>
     api.post('/auth/quick-login', { phone, name }),
   getMe: () => api.get('/auth/me'),
+  getTrustScore: (userId?: string) =>
+    api.get(userId ? `/auth/trust-score/${userId}` : '/auth/trust-score'),
   updateProfile: (data: Record<string, unknown>) =>
     api.put('/auth/profile', data),
+  verifyTraveller: (data: Record<string, unknown>) =>
+    api.post('/auth/traveller-verify', data),
+  submitSupport: (data: Record<string, unknown>) =>
+    api.post('/auth/support', data),
 };
 
 // === Trips ===
@@ -55,7 +61,12 @@ export const tripAPI = {
     api.put(`/trips/${id}/status`, { status }),
   verifyFace: (id: string, imageData?: string) =>
     api.put(`/trips/${id}/verify-face`, { imageData }),
+  generateStartOtp: (id: string, coords?: { passengerLat?: number; passengerLng?: number; travellerLat?: number; travellerLng?: number }) =>
+    api.post(`/trips/${id}/start-otp/generate`, coords || {}),
+  verifyStartOtp: (id: string, enteredOtp: string) =>
+    api.post(`/trips/${id}/start-otp/verify`, { enteredOtp }),
   cancel: (id: string) => api.delete(`/trips/${id}`),
+  getDailyQuota: () => api.get('/trips/daily-quota'),
 };
 
 // === Matches ===

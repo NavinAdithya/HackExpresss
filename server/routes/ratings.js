@@ -10,7 +10,7 @@ const Rating = require('../models/Rating');
 const User = require('../models/User');
 const Trip = require('../models/Trip');
 const { auth } = require('../middleware/auth');
-const { updateTrustScore } = require('../services/trust-safety');
+const { computeUserTrustScore } = require('../services/trust-score');
 
 const router = express.Router();
 
@@ -56,16 +56,14 @@ router.post('/', auth, async (req, res) => {
       comment: comment || '',
     });
 
-    // Update trust score
-    const ratedUser = await User.findById(ratedUserId);
-    if (ratedUser) {
-      ratedUser.trustScore = updateTrustScore(ratedUser.trustScore, rating);
-      await ratedUser.save();
-    }
+    // Recompute authoritative trust score for rated user from actual activity
+    const trustData = await computeUserTrustScore(ratedUserId);
 
     res.status(201).json({
       rating: ratingDoc,
-      newTrustScore: ratedUser?.trustScore,
+      newTrustScore: trustData.score,
+      trustScoreBreakdown: trustData.breakdown,
+      trustScoreFactors: trustData.factors,
     });
   } catch (err) {
     console.error('[RATINGS] create error:', err);

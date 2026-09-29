@@ -11,6 +11,7 @@ const SOSAlert = require('../models/SOSAlert');
 const Trip = require('../models/Trip');
 const User = require('../models/User');
 const { auth } = require('../middleware/auth');
+const { computeUserTrustScore } = require('../services/trust-score');
 
 const router = express.Router();
 
@@ -63,6 +64,9 @@ router.post('/activate', auth, async (req, res) => {
     console.log(`[MOCKED] Notifying local authorities...`);
     console.log(`🚨🚨🚨 END SOS ALERT LOG 🚨🚨🚨\n`);
 
+    // Recompute authoritative trust score for alert trigger
+    await computeUserTrustScore(req.userId);
+
     res.status(201).json({
       alert,
       message: 'SOS alert activated. Emergency contacts notified.',
@@ -97,6 +101,10 @@ router.put('/:id/resolve', auth, async (req, res) => {
       { status: req.body.falseAlarm ? 'FALSE_ALARM' : 'RESOLVED' },
       { new: true }
     );
+
+    if (alert?.userId) {
+      await computeUserTrustScore(alert.userId);
+    }
 
     res.json({ alert });
   } catch (err) {

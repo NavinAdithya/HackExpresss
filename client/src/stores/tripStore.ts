@@ -3,7 +3,7 @@
  */
 
 import { create } from 'zustand';
-import type { Trip, MatchResult, FareBreakdown } from '../types';
+import type { Trip, MatchResult, FareBreakdown, DailyCommuteQuota } from '../types';
 import { tripAPI, matchAPI } from '../services/api';
 
 interface TripState {
@@ -12,17 +12,22 @@ interface TripState {
   matches: MatchResult[];
   matchLoading: boolean;
   fareBreakdown: FareBreakdown | null;
+  dailyQuota: DailyCommuteQuota | null;
   loading: boolean;
   error: string | null;
 
   // Actions
   fetchTrips: (params?: Record<string, string>) => Promise<void>;
   fetchTrip: (id: string) => Promise<void>;
+  fetchDailyQuota: () => Promise<void>;
   createTrip: (data: Record<string, unknown>) => Promise<Trip>;
   findMatches: (tripId: string) => Promise<void>;
   acceptMatch: (matchId: string) => Promise<void>;
+  cancelTrip: (tripId: string) => Promise<void>;
   updateTripStatus: (tripId: string, status: string) => Promise<void>;
-  verifyFace: (tripId: string) => Promise<{ verified: boolean; bothVerified: boolean }>;
+  verifyFace: (tripId: string, imageData?: string) => Promise<{ verified: boolean; confidence: number; bothVerified: boolean; status?: string }>;
+  generateStartOtp: (tripId: string, coords?: { passengerLat?: number; passengerLng?: number; travellerLat?: number; travellerLng?: number }) => Promise<{ tripStartOtp: string; expiresAt: string }>;
+  verifyStartOtp: (tripId: string, enteredOtp: string) => Promise<{ success: boolean; status: string; trip: Trip }>;
   setCurrentTrip: (trip: Trip | null) => void;
   clearMatches: () => void;
 }
@@ -33,8 +38,18 @@ export const useTripStore = create<TripState>((set, get) => ({
   matches: [],
   matchLoading: false,
   fareBreakdown: null,
+  dailyQuota: null,
   loading: false,
   error: null,
+
+  fetchDailyQuota: async () => {
+    try {
+      const res = await tripAPI.getDailyQuota();
+      set({ dailyQuota: res.data });
+    } catch {
+      /* handled */
+    }
+  },
 
   fetchTrips: async (params) => {
     set({ loading: true });
@@ -69,6 +84,7 @@ export const useTripStore = create<TripState>((set, get) => ({
         trips: [trip, ...state.trips],
         currentTrip: trip,
         fareBreakdown: res.data.fareEstimate,
+        dailyQuota: res.data.dailyQuota || state.dailyQuota,
         loading: false,
       }));
       return trip;
@@ -82,7 +98,11 @@ export const useTripStore = create<TripState>((set, get) => ({
     set({ matchLoading: true, matches: [], error: null });
     try {
       const res = await matchAPI.find(tripId);
-      set({ matches: res.data.matches, matchLoading: false });
+      set((state) => ({
+        matches: res.data.matches,
+        dailyQuota: res.data.dailyQuota || state.dailyQuota,
+        matchLoading: false,
+      }));
     } catch (err: any) {
       set({ matchLoading: false, error: err.response?.data?.error });
     }
@@ -91,8 +111,25 @@ export const useTripStore = create<TripState>((set, get) => ({
   acceptMatch: async (matchId) => {
     try {
       const res = await matchAPI.accept(matchId);
-      const { tripA, tripB } = res.data;
-      set({ currentTrip: tripA || tripB });
+      const { tripA, tripB, dailyQuota } = res.data;
+      set((state) => ({
+        currentTrip: tripA || tripB,
+        dailyQuota: dailyQuota || state.dailyQuota,
+      }));
+    } catch (err: any) {
+      set({ error: err.response?.data?.error });
+      throw err;
+    }
+  },
+
+  cancelTrip: async (tripId) => {
+    try {
+      const res = await tripAPI.cancel(tripId);
+      set((state) => ({
+        trips: state.trips.map((t) => (t._id === tripId ? { ...t, status: 'CANCELLED' as any } : t)),
+        currentTrip: state.currentTrip?._id === tripId ? { ...state.currentTrip, status: 'CANCELLED' as any } : state.currentTrip,
+        dailyQuota: res.data.dailyQuota || state.dailyQuota,
+      }));
     } catch (err: any) {
       set({ error: err.response?.data?.error });
       throw err;
@@ -109,12 +146,33 @@ export const useTripStore = create<TripState>((set, get) => ({
     }
   },
 
-  verifyFace: async (tripId) => {
+  verifyFace: async (tripId, imageData) => {
     try {
-      const res = await tripAPI.verifyFace(tripId);
+      const res = await tripAPI.verifyFace(tripId, imageData);
       return res.data;
     } catch (err: any) {
-      set({ error: err.response?.data?.error });
+      set({ error: err.response?.data?.message || err.response?.data?.error });
+      throw err;
+    }
+  },
+
+  generateStartOtp: async (tripId, coords) => {
+    try {
+      const res = await tripAPI.generateStartOtp(tripId, coords);
+      return res.data;
+    } catch (err: any) {
+      set({ error: err.response?.data?.message || err.response?.data?.error });
+      throw err;
+    }
+  },
+
+  verifyStartOtp: async (tripId, enteredOtp) => {
+    try {
+      const res = await tripAPI.verifyStartOtp(tripId, enteredOtp);
+      if (res.data.trip) set({ currentTrip: res.data.trip });
+      return res.data;
+    } catch (err: any) {
+      set({ error: err.response?.data?.message || err.response?.data?.error });
       throw err;
     }
   },

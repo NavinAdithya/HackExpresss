@@ -1,6 +1,6 @@
 /**
  * VehicleNodes — Glowing nodes traveling along routes
- * Represents commuters and shared vehicles
+ * Represents commuters and shared vehicles in PO → PO orange/cream palette
  */
 
 import { useRef, useMemo } from 'react';
@@ -28,8 +28,8 @@ export function VehicleNodes() {
       ),
       speed: 0.12,
       offset: 0.1,
-      color: '#00f2fe',
-      size: 0.12,
+      color: '#F63B03',
+      size: 0.13,
     },
     {
       curve: new THREE.CubicBezierCurve3(
@@ -40,7 +40,7 @@ export function VehicleNodes() {
       ),
       speed: 0.12,
       offset: 0.55,
-      color: '#38ef7d',
+      color: '#FFF8E5',
       size: 0.1,
     },
     {
@@ -52,8 +52,8 @@ export function VehicleNodes() {
       ),
       speed: 0.18,
       offset: 0.3,
-      color: '#a18cd1',
-      size: 0.13,
+      color: '#E79E89',
+      size: 0.14,
     },
     {
       curve: new THREE.CubicBezierCurve3(
@@ -64,8 +64,8 @@ export function VehicleNodes() {
       ),
       speed: 0.14,
       offset: 0.75,
-      color: '#00f2fe',
-      size: 0.11,
+      color: '#F73C06',
+      size: 0.12,
     },
   ], []);
 
@@ -79,7 +79,6 @@ export function VehicleNodes() {
       const point = node.curve.getPointAt(t);
       mesh.position.copy(point);
 
-      // Subtle pulse scale
       const scale = 1 + Math.sin(time * 4 + i) * 0.15;
       mesh.scale.set(scale, scale, scale);
     });

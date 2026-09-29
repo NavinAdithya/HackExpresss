@@ -152,4 +152,45 @@ describe('Matching Engine — Pure Scorer', () => {
       expect(ranked[0].userId).toBe('free-user');
     });
   });
+
+  describe('Honest Match Quality Thresholds (Requirement 2 & 3)', () => {
+    test('score < 40 is classified as Not suitable and never calls a poor match great', () => {
+      const result = scoreMatch({
+        routeOverlap: 0,
+        pickupDistanceKm: 4.5,
+        destinationDistanceKm: 4.93,
+        timeCompatibility: 1,
+      });
+
+      expect(result.finalScore).toBeLessThan(40);
+      expect(result.qualityTier).toBe('NOT_SUITABLE');
+      expect(result.qualityLabel).toBe('Not suitable');
+
+      const { generateFallbackExplanation } = require('../services/gemini-service');
+      const explanation = generateFallbackExplanation({
+        finalScore: result.finalScore,
+        routeOverlap: 0,
+        timeCompatibility: 1,
+        detourKm: 8.34,
+        destinationDistanceKm: 4.93,
+      });
+
+      expect(explanation.explanation).toContain('Not a suitable match');
+      expect(explanation.explanation).not.toContain('Great match');
+    });
+
+    test('score 80-89 is classified as Strong match', () => {
+      const result = scoreMatch({
+        routeOverlap: 80,
+        pickupDistanceKm: 1.0,
+        destinationDistanceKm: 1.0,
+        timeCompatibility: 75,
+      });
+
+      expect(result.finalScore).toBeGreaterThanOrEqual(80);
+      expect(result.finalScore).toBeLessThan(90);
+      expect(result.qualityTier).toBe('STRONG');
+      expect(result.qualityLabel).toBe('Strong match');
+    });
+  });
 });

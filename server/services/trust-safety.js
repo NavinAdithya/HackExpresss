@@ -57,4 +57,4 @@ function updateTrustScore(currentScore, rating) {
   return Math.round(newScore);
 }
 
-module.exports = { applySafetyFilter, updateTrustScore };
+module.exports = { applySafetyFilter, updateTrustScore, calculateTrustScore: require('./trust-score').calculateTrustScore };

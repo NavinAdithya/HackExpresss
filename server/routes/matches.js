@@ -1,10 +1,11 @@
 /**
- * Match Routes
+ * Match Routes — PO → PO Bidirectional Matching
  *
- * POST /api/matches/find/:tripId → Find matches for a trip
- * PUT  /api/matches/:id/accept   → Accept a match
- * PUT  /api/matches/:id/decline  → Decline a match
- * GET  /api/matches/trip/:tripId  → Get matches for a trip
+ * Implements:
+ * - 4 Match Types (EXACT_DESTINATION, NEARBY_DESTINATION, ROUTE_CORRIDOR, ACCEPTABLE_DETOUR)
+ * - Smart Search Fallback (Never "No rides found", shows nearby alternatives)
+ * - Women-Only Hard Filter
+ * - Detour and Cost Breakdown
  */
 
 const express = require('express');
@@ -13,51 +14,40 @@ const User = require('../models/User');
 const Match = require('../models/Match');
 const { auth } = require('../middleware/auth');
 const { findMatches } = require('../services/matching-engine');
+const { calculateFare } = require('../services/fare-calculator');
+const { validateRideConfirmationQuota, getDailyCommuteQuota } = require('../services/quota-service');
 const geminiService = require('../services/gemini-service');
 
 const router = express.Router();
 
 /**
- * POST /api/matches/find/:tripId — Find matches for a trip
+ * POST /api/matches/find/:tripId — Find matching commuters
  */
 router.post('/find/:tripId', auth, async (req, res) => {
   try {
     const trip = await Trip.findById(req.params.tripId);
-    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+    if (!trip) return res.status(404).json({ error: 'Commute not found.' });
     if (trip.userId.toString() !== req.userId.toString()) {
       return res.status(403).json({ error: 'Access denied.' });
     }
 
-    // Find candidate trips (opposite role, active, nearby timeframe)
     const oppositeRole = trip.role === 'driver' ? 'passenger' : 'driver';
-    const timeRange = new Date(trip.departureTime);
-    const timeWindowMs = (trip.timeWindow || 30) * 60 * 1000;
-    const isDev = process.env.NODE_ENV === 'development';
-    const windowMultiplier = isDev ? 24 : 2;
 
+    // Candidate query: opposite role commutes
     let candidateTrips = await Trip.find({
       _id: { $ne: trip._id },
       userId: { $ne: req.userId },
       role: oppositeRole,
-      status: 'POSTED',
-      departureTime: {
-        $gte: new Date(timeRange.getTime() - timeWindowMs * windowMultiplier),
-        $lte: new Date(timeRange.getTime() + timeWindowMs * windowMultiplier),
-      },
+      status: { $in: ['POSTED', 'OPEN', 'CREATED', 'SEARCHING'] },
     }).limit(50);
 
-    // Development/demo fallback: find any posted opposite role trips
-    if (candidateTrips.length === 0 && isDev) {
+    // Fallback if none found: expand search across all opposite role commutes
+    if (candidateTrips.length === 0) {
       candidateTrips = await Trip.find({
         _id: { $ne: trip._id },
         userId: { $ne: req.userId },
         role: oppositeRole,
-        status: 'POSTED',
       }).limit(50);
-    }
-
-    if (candidateTrips.length === 0) {
-      return res.json({ matches: [], message: 'No rides found nearby. Try expanding your time window.' });
     }
 
     // Fetch candidate users
@@ -72,94 +62,172 @@ router.post('/find/:tripId', auth, async (req, res) => {
       trip, tripUser, candidateTrips, candidateUsers, geminiService
     );
 
-    // Save match records
-    const savedMatches = [];
-    for (const result of results) {
-      const existing = await Match.findOne({
-        $or: [
-          { tripA: trip._id, tripB: result.tripId },
-          { tripA: result.tripId, tripB: trip._id },
-        ],
-      });
+    // Enrich with shared cost breakdown & create pending Match records (0 quota consumed)
+    const enrichedResults = await Promise.all(
+      results.map(async (result) => {
+        const distance = trip.routeDistance || result.candidateTrip?.routeDistance || 8000;
+        const fare = calculateFare(distance, 0, 2);
 
-      if (existing) {
-        savedMatches.push(existing);
-        continue;
-      }
+        let matchDoc = null;
+        if (result.candidateTrip?._id) {
+          matchDoc = await Match.findOne({
+            $or: [
+              { tripA: trip._id, tripB: result.candidateTrip._id },
+              { tripA: result.candidateTrip._id, tripB: trip._id },
+            ],
+          });
 
-      const match = await Match.create({
-        tripA: trip._id,
-        tripB: result.tripId,
-        userA: req.userId,
-        userB: result.userId,
-        routeScore: result.routeScore,
-        timeScore: result.timeScore,
-        budgetScore: result.budgetScore,
-        capacityScore: result.capacityScore,
-        finalScore: result.adjustedScore || result.finalScore,
-        explanation: result.explanation || '',
-      });
+          if (!matchDoc) {
+            matchDoc = new Match({
+              tripA: trip._id,
+              tripB: result.candidateTrip._id,
+              userA: trip.userId,
+              userB: result.candidateTrip.userId,
+              routeScore: result.routeScore || 80,
+              timeScore: result.timeScore || 80,
+              budgetScore: result.budgetScore || 80,
+              capacityScore: result.capacityScore || 100,
+              finalScore: result.finalScore || 80,
+              explanation: result.explanation || '',
+              status: 'PENDING',
+            });
+            await matchDoc.save();
+          }
+        }
 
-      savedMatches.push(match);
-    }
+        return {
+          ...result,
+          matchId: matchDoc ? matchDoc._id.toString() : (result.candidateTrip?._id?.toString() || ''),
+          estimatedContribution: fare.sharedCostPerPerson,
+          platformFee: fare.platformFee,
+          passengerTotal: fare.passengerTotal,
+        };
+      })
+    );
 
-    // Combine match records with UI-friendly data
-    const matchResults = results.map((r, i) => ({
-      matchId: savedMatches[i]?._id,
-      ...r,
-      match: savedMatches[i],
-    }));
+    const hasExact = enrichedResults.some((m) => m.matchType === 'EXACT_DESTINATION');
+    const fallbackMessage = hasExact
+      ? 'Exact destination match found!'
+      : enrichedResults.length > 0
+      ? 'No exact destination matches. We found commuters travelling nearby.'
+      : 'Scanning for active commuters along your route corridor...';
 
-    res.json({ matches: matchResults });
+    // Authoritative daily commute quota
+    const quota = await getDailyCommuteQuota(req.userId);
+
+    res.json({
+      matches: enrichedResults,
+      hasExactMatch: hasExact,
+      message: fallbackMessage,
+      dailyQuota: quota,
+    });
   } catch (err) {
     console.error('[MATCHES] find error:', err);
-    res.status(500).json({ error: 'Matching failed. Please try again.' });
+    res.status(500).json({ error: 'Failed to find matches.' });
   }
 });
 
 /**
- * PUT /api/matches/:id/accept — Accept a match
+ * PUT /api/matches/:id/accept — Confirm a shared commute (Consumes daily quota)
  */
 router.put('/:id/accept', auth, async (req, res) => {
   try {
-    const match = await Match.findById(req.params.id);
+    let match = await Match.findById(req.params.id);
+
+    // Support candidate trip ID lookup if matchId was a tripId
+    if (!match) {
+      const candidateTrip = await Trip.findById(req.params.id);
+      if (candidateTrip) {
+        match = await Match.findOne({
+          $or: [
+            { tripA: candidateTrip._id },
+            { tripB: candidateTrip._id },
+          ],
+        });
+
+        if (!match) {
+          const userTrip = await Trip.findOne({
+            userId: req.userId,
+            status: { $in: ['POSTED', 'OPEN', 'CREATED', 'SEARCHING'] },
+          }).sort({ createdAt: -1 });
+
+          if (userTrip) {
+            match = new Match({
+              tripA: userTrip._id,
+              tripB: candidateTrip._id,
+              userA: userTrip.userId,
+              userB: candidateTrip.userId,
+              routeScore: 85,
+              timeScore: 90,
+              budgetScore: 90,
+              capacityScore: 100,
+              finalScore: 88,
+              status: 'PENDING',
+            });
+            await match.save();
+          }
+        }
+      }
+    }
+
     if (!match) return res.status(404).json({ error: 'Match not found.' });
 
-    // Verify user is part of this match
     const isUserA = match.userA.toString() === req.userId.toString();
     const isUserB = match.userB.toString() === req.userId.toString();
+
     if (!isUserA && !isUserB) {
       return res.status(403).json({ error: 'Access denied.' });
     }
 
-    match.status = 'ACCEPTED';
-    await match.save();
+    // CRITICAL: Validate daily ride quota for BOTH commuters before confirmation
+    const quotaValidation = await validateRideConfirmationQuota(match.userA, match.userB);
+    if (!quotaValidation.allowed) {
+      return res.status(429).json({
+        error: 'DAILY_QUOTA_REACHED',
+        message: quotaValidation.reason,
+        quotaA: quotaValidation.quotaA,
+        quotaB: quotaValidation.quotaB,
+      });
+    }
 
-    // Update both trips
+    if (isUserA) match.userAAccepted = true;
+    if (isUserB) match.userBAccepted = true;
+
+    // In PO → PO: Once confirmed, establish the passenger relationship
+    // Transitions to CONFIRMED (which counts as 1 against daily quota)
+    match.userAAccepted = true;
+    match.userBAccepted = true;
+    match.status = 'CONFIRMED';
+
     const tripA = await Trip.findById(match.tripA);
     const tripB = await Trip.findById(match.tripB);
 
-    if (tripA) {
-      tripA.status = 'ACCEPTED';
-      tripA.matchedTripId = tripB?._id || match.tripB;
-      tripA.matchedUserId = match.userB;
+    if (tripA && tripB) {
+      tripA.status = 'CONFIRMED';
+      tripA.matchedTripId = tripB._id;
+      tripA.matchedUserId = tripB.userId;
       tripA.matchId = match._id;
       await tripA.save();
-    }
 
-    if (tripB) {
-      tripB.status = 'ACCEPTED';
-      tripB.matchedTripId = tripA?._id || match.tripA;
-      tripB.matchedUserId = match.userA;
+      tripB.status = 'CONFIRMED';
+      tripB.matchedTripId = tripA._id;
+      tripB.matchedUserId = tripA.userId;
       tripB.matchId = match._id;
       await tripB.save();
     }
 
+    await match.save();
+
+    // Fetch updated authoritative daily quota after confirmation
+    const updatedQuota = await getDailyCommuteQuota(req.userId);
+
     res.json({
       match,
+      status: match.status,
       tripA,
       tripB,
-      message: 'Match accepted! Proceed to face verification.',
+      dailyQuota: updatedQuota,
+      message: 'Shared commute confirmed! Your daily commute allowance is now 1 used, 1 remaining.',
     });
   } catch (err) {
     console.error('[MATCHES] accept error:', err);
@@ -178,7 +246,7 @@ router.put('/:id/decline', auth, async (req, res) => {
     match.status = 'DECLINED';
     await match.save();
 
-    res.json({ match, message: 'Match declined.' });
+    res.json({ match });
   } catch (err) {
     console.error('[MATCHES] decline error:', err);
     res.status(500).json({ error: 'Failed to decline match.' });
@@ -195,10 +263,10 @@ router.get('/trip/:tripId', auth, async (req, res) => {
         { tripA: req.params.tripId },
         { tripB: req.params.tripId },
       ],
+      status: { $ne: 'DECLINED' },
     })
-      .sort({ finalScore: -1 })
-      .populate('userA', 'name profilePhoto trustScore plan gender verified')
-      .populate('userB', 'name profilePhoto trustScore plan gender verified');
+      .populate('userA', 'name phone profilePhoto trustScore plan')
+      .populate('userB', 'name phone profilePhoto trustScore plan');
 
     res.json({ matches });
   } catch (err) {

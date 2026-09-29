@@ -1,5 +1,6 @@
 /**
  * RouteNetwork — 3D connected route curves with glowing animation
+ * Uses official PO → PO orange and dust-pink palette
  */
 
 import { useMemo, useRef } from 'react';
@@ -9,7 +10,6 @@ import * as THREE from 'three';
 export function RouteNetwork() {
   const groupRef = useRef<THREE.Group>(null!);
 
-  // Generate 3 curved routes using tubes for glowing 3D thickness
   const routes = useMemo(() => {
     const curves = [
       new THREE.CubicBezierCurve3(
@@ -33,8 +33,8 @@ export function RouteNetwork() {
     ];
 
     return curves.map((curve, idx) => {
-      const geometry = new THREE.TubeGeometry(curve, 64, 0.025, 8, false);
-      const color = idx % 2 === 0 ? '#00f2fe' : '#9b51e0';
+      const geometry = new THREE.TubeGeometry(curve, 64, 0.03, 8, false);
+      const color = idx % 2 === 0 ? '#F63B03' : '#E79E89';
       return { geometry, color };
     });
   }, []);
@@ -52,7 +52,7 @@ export function RouteNetwork() {
           <meshBasicMaterial
             color={route.color}
             transparent
-            opacity={0.7}
+            opacity={0.8}
             blending={THREE.AdditiveBlending}
           />
         </mesh>

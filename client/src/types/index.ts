@@ -1,5 +1,5 @@
 /**
- * TypeScript interfaces for PO → PO
+ * TypeScript interfaces for PO → PO Master Specification
  */
 
 export interface User {
@@ -7,10 +7,30 @@ export interface User {
   name: string;
   phone: string;
   gender: 'male' | 'female' | 'other';
+  dateOfBirth?: string;
   verified: boolean;
-  verifiedOnly: boolean;
+  accountVerified?: boolean;
+  isPoPoMember?: boolean;
+  driverStatus?: 'NOT_REQUESTED' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  licenseNumber?: string;
+  vehicleNumber?: string;
+  vehicleModel?: string;
+  rolePreference?: 'PASSENGER' | 'TRAVELLER' | 'BOTH';
+  faceReferencePhoto?: string;
+  vehicleDetails?: {
+    transportMode: 'BIKE' | 'CAR';
+    vehicleModel: string;
+    vehicleRegistration: string;
+    capacity: number;
+  };
+  verifiedOnly?: boolean;
   womenOnly: boolean;
   trustScore: number;
+  trustScoreBreakdown?: TrustScoreBreakdown;
+  trustScoreFactors?: TrustScoreFactor[];
+  trustTier?: string;
+  trustTierLabel?: string;
+  dailyQuota?: DailyCommuteQuota;
   plan: 'FREE' | 'VERIFIED' | 'PRO';
   subscriptionStatus: 'FREE' | 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
   subscriptionStart?: string;
@@ -19,6 +39,49 @@ export interface User {
   trustedContacts: TrustedContact[];
   recurringCommutes?: RecurringCommute[];
   createdAt: string;
+}
+
+export interface DailyCommuteQuota {
+  maxRidesPerDay: number;
+  usedRideCount: number;
+  remainingRideCount: number;
+  canConfirmRide: boolean;
+  quotaResetAt: string;
+  metrics: {
+    searchAttempts: number;
+    commutePublications: number;
+    passengerMatches: number;
+    confirmedRides: number;
+    completedRides: number;
+    cancelledBeforeStart: number;
+  };
+  statusRules?: Record<string, number>;
+}
+
+export interface TrustScoreFactor {
+  id: string;
+  name: string;
+  points: number;
+  maxPoints: number;
+  status: string;
+  statusType: 'positive' | 'neutral' | 'warning' | 'danger';
+  description: string;
+}
+
+export interface TrustScoreBreakdown {
+  score: number;
+  tier: string;
+  tierLabel: string;
+  breakdown: {
+    identityVerification: TrustScoreFactor;
+    travellerStatus: TrustScoreFactor;
+    completedTrips: TrustScoreFactor;
+    ratings: TrustScoreFactor;
+    cancellationReliability: TrustScoreFactor;
+    conductPenalties: TrustScoreFactor;
+  };
+  factors: TrustScoreFactor[];
+  calculatedAt: string;
 }
 
 export interface TrustedContact {
@@ -78,8 +141,29 @@ export interface Trip {
 }
 
 export type TripStatus =
-  | 'POSTED' | 'MATCHED' | 'ACCEPTED' | 'VERIFYING'
-  | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+  | 'SEARCHING'
+  | 'MATCH_FOUND'
+  | 'BOOKING_REQUESTED'
+  | 'CONFIRMED'
+  | 'IDENTITY_VERIFICATION'
+  | 'PICKUP_VERIFICATION'
+  | 'READY_TO_START'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'IDENTITY_MISMATCH'
+  | 'VERIFICATION_FAILED'
+  | 'OTP_INVALID'
+  | 'OTP_EXPIRED'
+  | 'OTP_ATTEMPTS_EXCEEDED'
+  | 'PICKUP_TOO_FAR'
+  | 'LOCATION_PERMISSION_DENIED'
+  | 'CAMERA_PERMISSION_DENIED'
+  | 'CANCELLED'
+  | 'NO_SHOW'
+  | 'POSTED'
+  | 'MATCHED'
+  | 'ACCEPTED'
+  | 'VERIFYING';
 
 export interface MatchResult {
   matchId: string;
@@ -93,12 +177,25 @@ export interface MatchResult {
   userPhoto: string;
   candidateTrip: Trip;
   routeScore: number;
+  pickupScore?: number;
+  destinationScore?: number;
   timeScore: number;
   budgetScore: number;
   capacityScore: number;
   finalScore: number;
   adjustedScore?: number;
   proBoost?: number;
+  matchType?: 'EXACT_DESTINATION' | 'NEARBY_DESTINATION' | 'ROUTE_CORRIDOR' | 'ACCEPTABLE_DETOUR';
+  qualityTier?: 'EXCELLENT' | 'STRONG' | 'COMPATIBLE' | 'WEAK' | 'NOT_SUITABLE';
+  qualityLabel?: string;
+  qualityColor?: string;
+  isFallbackMatch?: boolean;
+  detourKm?: number;
+  pickupDistanceKm?: number;
+  destinationDistanceKm?: number;
+  estimatedContribution?: number;
+  platformFee?: number;
+  passengerTotal?: number;
   budgetCompatible: boolean;
   capacityCompatible: boolean;
   explanation: string;
@@ -123,12 +220,19 @@ export interface Match {
 
 export interface FareBreakdown {
   distanceKm: number;
+  fuelRate?: number;
   fuelCost: number;
   tolls: number;
-  totalOccupants: number;
+  totalOccupants?: number;
+  actualOccupants?: number;
+  totalTravelExpense?: number;
   poolFare: number;
+  sharedCostPerPerson?: number;
   commission: number;
+  platformFee?: number;
   finalAmount: number;
+  passengerTotal?: number;
+  travellerEffectiveExpense?: number;
   formula: string;
 }
 

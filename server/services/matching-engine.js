@@ -1,60 +1,72 @@
 /**
- * Matching Engine — Pure deterministic scoring.
+ * Matching Engine — Pure deterministic scoring & 4 Match Types
  *
  * Architecture:
  *   Candidate retrieval (DB)
  *     ↓
- *   Safety hard filter (trust-safety.js)
+ *   Safety hard filter (trust-safety.js — Women-only, etc.)
  *     ↓
- *   Eligibility filter
+ *   Traveller approval filter (Only approved travellers can share commute)
  *     ↓
- *   PURE DETERMINISTIC SCORER ← this file
+ *   PURE DETERMINISTIC SCORER (35% Route, 20% Pickup, 20% Dest, 15% Time, 5% Transport, 5% Cost)
  *     ↓
- *   PRO priority adjustment
+ *   Match Type Classification (EXACT_DESTINATION, NEARBY_DESTINATION, ROUTE_CORRIDOR, ACCEPTABLE_DETOUR)
  *     ↓
- *   Rank
+ *   PRO priority adjustment (boost applied ONLY after safety)
  *     ↓
  *   Gemini explanation
  *
  * The scoring functions in this file are PURE:
- * - No MongoDB calls
- * - No Redis calls
- * - No Gemini calls
- * - No OSRM calls
- * - No network side effects
- * - Fully unit-testable
+ * - No DB / network calls inside pure scoring
+ * - Fully deterministic & unit-testable
  */
 
 const RIDE_CONFIG = require('../config/ride');
+const { getMatchQuality } = require('../config/ride');
 const { calculateRouteOverlap } = require('./route-service');
+
+/**
+ * Compute haversine distance in kilometers between two [lng, lat] points.
+ * PURE FUNCTION.
+ */
+function haversineDistanceKm(coordsA, coordsB) {
+  if (!coordsA || !coordsB) return 999;
+  const [lng1, lat1] = coordsA;
+  const [lng2, lat2] = coordsB;
+
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 100) / 100;
+}
 
 /**
  * Compute time compatibility between two trips.
  * PURE FUNCTION.
- *
- * @param {Date|string} timeA - Departure time A
- * @param {number} windowA - Flexibility in minutes
- * @param {Date|string} timeB - Departure time B
- * @param {number} windowB - Flexibility in minutes
- * @returns {number} Compatibility score (0–100)
  */
 function computeTimeCompatibility(timeA, windowA, timeB, windowB) {
   const tA = new Date(timeA).getTime();
   const tB = new Date(timeB).getTime();
-  const wA = (windowA || 30) * 60 * 1000; // to ms
+  const wA = (windowA || 30) * 60 * 1000;
   const wB = (windowB || 30) * 60 * 1000;
 
-  // Windows
   const startA = tA - wA;
   const endA = tA + wA;
   const startB = tB - wB;
   const endB = tB + wB;
 
-  // Overlap
   const overlapStart = Math.max(startA, startB);
   const overlapEnd = Math.min(endA, endB);
 
-  if (overlapStart >= overlapEnd) return 0; // No overlap
+  if (overlapStart >= overlapEnd) return 0;
 
   const overlap = overlapEnd - overlapStart;
   const maxWindow = Math.max(endA - startA, endB - startB);
@@ -65,10 +77,6 @@ function computeTimeCompatibility(timeA, windowA, timeB, windowB) {
 /**
  * Compute budget compatibility.
  * PURE FUNCTION.
- *
- * @param {{ min: number, max: number }} budgetA
- * @param {{ min: number, max: number }} budgetB
- * @returns {{ compatible: boolean, score: number }}
  */
 function computeBudgetCompatibility(budgetA, budgetB) {
   const overlapMin = Math.max(budgetA.min || 0, budgetB.min || 0);
@@ -90,10 +98,6 @@ function computeBudgetCompatibility(budgetA, budgetB) {
 /**
  * Compute capacity compatibility.
  * PURE FUNCTION.
- *
- * @param {number} seatsOffered - Seats available (driver)
- * @param {number} seatsNeeded - Seats needed (passenger)
- * @returns {{ compatible: boolean, score: number }}
  */
 function computeCapacityCompatibility(seatsOffered, seatsNeeded) {
   const compatible = seatsOffered >= seatsNeeded;
@@ -104,35 +108,94 @@ function computeCapacityCompatibility(seatsOffered, seatsNeeded) {
 }
 
 /**
- * Compute the final deterministic match score.
- * PURE FUNCTION — no DB, no API, no side effects.
+ * Classify match into one of the 4 official match types.
+ * PURE FUNCTION.
  *
- * @param {Object} data - Pre-computed compatibility data
- * @returns {Object} Scored result with dimension breakdowns
+ * 1. EXACT_DESTINATION
+ * 2. NEARBY_DESTINATION
+ * 3. ROUTE_CORRIDOR
+ * 4. ACCEPTABLE_DETOUR
+ */
+function classifyMatchType(destinationDistanceKm, routeOverlap, detourKm) {
+  if (destinationDistanceKm <= 0.4) {
+    return 'EXACT_DESTINATION';
+  }
+  if (destinationDistanceKm <= (RIDE_CONFIG.nearbyDestinationRadiusKm || 3.0)) {
+    return 'NEARBY_DESTINATION';
+  }
+  if (routeOverlap >= 50) {
+    return 'ROUTE_CORRIDOR';
+  }
+  if (detourKm <= (RIDE_CONFIG.maxDetourKm || 5.0)) {
+    return 'ACCEPTABLE_DETOUR';
+  }
+  return 'NEARBY_DESTINATION';
+}
+
+/**
+ * Compute the final deterministic match score using Section 47 weights:
+ * - Route overlap: 35%
+ * - Pickup proximity: 20%
+ * - Destination proximity: 20%
+ * - Timing: 15%
+ * - Transport: 5%
+ * - Cost compatibility: 5%
+ *
+ * Safety is NOT SCORED (it is a hard filter).
+ * PURE FUNCTION.
  */
 function scoreMatch(data) {
-  const { routeOverlap, timeCompatibility, budgetCompatibility, capacityCompatibility } = data;
+  const {
+    routeOverlap = 0,
+    pickupDistanceKm = 0,
+    destinationDistanceKm = 0,
+    timeCompatibility = 0,
+    budgetCompatibility = { compatible: true, score: 100 },
+    capacityCompatibility = { compatible: true, score: 100 },
+    transportCompatible = true,
+  } = data;
 
   const w = RIDE_CONFIG.matchingWeights;
 
-  const routeScore = routeOverlap;
-  const timeScore = timeCompatibility;
+  // Proximity scores invert distance (0 km = 100%, 5 km = 0%)
+  const pickupScore = Math.max(0, Math.round((1 - Math.min(pickupDistanceKm, 5) / 5) * 100));
+  const destinationScore = Math.max(0, Math.round((1 - Math.min(destinationDistanceKm, 5) / 5) * 100));
+  const routeScore = Math.max(0, Math.min(100, Math.round(routeOverlap)));
+  const timeScore = Math.max(0, Math.min(100, Math.round(timeCompatibility)));
+  const transportScore = transportCompatible ? 100 : 0;
   const budgetScore = budgetCompatibility.compatible ? budgetCompatibility.score : 0;
   const capacityScore = capacityCompatibility.compatible ? 100 : 0;
 
-  // Weighted composite
-  const finalScore =
+  // Weighted score
+  const finalScore = Math.round((
     routeScore * w.route +
+    pickupScore * w.pickup +
+    destinationScore * w.destination +
     timeScore * w.time +
-    budgetScore * w.budget +
-    capacityScore * w.capacity;
+    transportScore * w.transport +
+    budgetScore * w.budget
+  ) * 100) / 100;
+
+  const detourKm = Math.round((pickupDistanceKm + destinationDistanceKm * 0.5) * 100) / 100;
+  const matchType = classifyMatchType(destinationDistanceKm, routeOverlap, detourKm);
+  const quality = getMatchQuality(finalScore);
 
   return {
-    routeScore: Math.round(routeScore),
-    timeScore: Math.round(timeScore),
-    budgetScore: Math.round(budgetScore),
-    capacityScore: Math.round(capacityScore),
-    finalScore: Math.round(finalScore * 100) / 100,
+    routeScore,
+    pickupScore,
+    destinationScore,
+    timeScore,
+    transportScore,
+    budgetScore,
+    capacityScore,
+    finalScore,
+    qualityTier: quality.key,
+    qualityLabel: quality.label,
+    qualityColor: quality.color,
+    pickupDistanceKm,
+    destinationDistanceKm,
+    detourKm,
+    matchType,
     budgetCompatible: budgetCompatibility.compatible,
     capacityCompatible: capacityCompatibility.compatible,
   };
@@ -142,41 +205,40 @@ function scoreMatch(data) {
  * Apply PRO priority adjustment to ranked matches.
  * PRO MUST NEVER BYPASS SAFETY — this runs AFTER all filters.
  * PURE FUNCTION.
- *
- * @param {Array} rankedMatches - Already scored and safety-filtered matches
- * @param {Object} usersMap - userId → user object
- * @returns {Array} Re-ranked matches
  */
 function applyProPriority(rankedMatches, usersMap) {
   return rankedMatches
-    .map((match) => ({
-      ...match,
-      proBoost: usersMap[match.userId]?.plan === 'PRO' ? RIDE_CONFIG.proPriorityBonus : 0,
-      adjustedScore: match.finalScore + (usersMap[match.userId]?.plan === 'PRO' ? RIDE_CONFIG.proPriorityBonus : 0),
-    }))
+    .map((match) => {
+      const isPro = usersMap[match.userId]?.plan === 'PRO';
+      const proBoost = isPro ? RIDE_CONFIG.proPriorityBonus : 0;
+      return {
+        ...match,
+        proBoost,
+        adjustedScore: Math.round((match.finalScore + proBoost) * 100) / 100,
+      };
+    })
     .sort((a, b) => b.adjustedScore - a.adjustedScore);
 }
 
 /**
  * Full matching pipeline orchestrator.
- * This is the ONLY function that touches external dependencies (DB, Gemini).
- * It calls pure functions for the actual scoring.
  */
 async function findMatches(trip, tripUser, candidateTrips, candidateUsers, geminiService) {
   const { applySafetyFilter } = require('./trust-safety');
 
   // Step 1: Prepare candidates with user data
-  const candidates = candidateTrips.map((ct) => ({
-    trip: ct,
-    user: candidateUsers.find((u) => u._id.toString() === ct.userId.toString()),
-  })).filter((c) => c.user); // Remove orphaned trips
+  const candidates = candidateTrips
+    .map((ct) => ({
+      trip: ct,
+      user: candidateUsers.find((u) => u._id.toString() === ct.userId.toString()),
+    }))
+    .filter((c) => c.user);
 
-  // Step 2: SAFETY HARD FILTER — remove before scoring
+  // Step 2: SAFETY HARD FILTER — women-only, etc.
   const safeCandidates = applySafetyFilter(trip, tripUser, candidates);
 
-  // Step 3: Eligibility filter (basic role matching)
+  // Step 3: Eligibility & role compatibility
   const eligible = safeCandidates.filter(({ trip: ct }) => {
-    // Driver must match with passenger and vice versa
     if (trip.role === 'driver' && ct.role !== 'passenger') return false;
     if (trip.role === 'passenger' && ct.role !== 'driver') return false;
     return true;
@@ -184,12 +246,19 @@ async function findMatches(trip, tripUser, candidateTrips, candidateUsers, gemin
 
   // Step 4: PURE DETERMINISTIC SCORING
   const scored = eligible.map(({ trip: ct, user: cu }) => {
-    // Compute route overlap from pre-calculated OSRM routes
     const routeOverlap = calculateRouteOverlap(
       trip.route?.coordinates || [],
       ct.route?.coordinates || [],
       RIDE_CONFIG.routeBufferMeters
     );
+
+    const tripOriginCoords = trip.origin?.location?.coordinates || [0, 0];
+    const ctOriginCoords = ct.origin?.location?.coordinates || [0, 0];
+    const tripDestCoords = trip.destination?.location?.coordinates || [0, 0];
+    const ctDestCoords = ct.destination?.location?.coordinates || [0, 0];
+
+    const pickupDistanceKm = haversineDistanceKm(tripOriginCoords, ctOriginCoords);
+    const destinationDistanceKm = haversineDistanceKm(tripDestCoords, ctDestCoords);
 
     const timeCompatibility = computeTimeCompatibility(
       trip.departureTime,
@@ -203,7 +272,6 @@ async function findMatches(trip, tripUser, candidateTrips, candidateUsers, gemin
       { min: ct.budgetMin, max: ct.budgetMax }
     );
 
-    // For capacity: driver's seats vs passenger's needs
     const driverTrip = trip.role === 'driver' ? trip : ct;
     const passengerTrip = trip.role === 'passenger' ? trip : ct;
     const capacityCompatibility = computeCapacityCompatibility(
@@ -213,9 +281,12 @@ async function findMatches(trip, tripUser, candidateTrips, candidateUsers, gemin
 
     const scores = scoreMatch({
       routeOverlap,
+      pickupDistanceKm,
+      destinationDistanceKm,
       timeCompatibility,
       budgetCompatibility,
       capacityCompatibility,
+      transportCompatible: true,
     });
 
     return {
@@ -239,20 +310,50 @@ async function findMatches(trip, tripUser, candidateTrips, candidateUsers, gemin
   });
   const ranked = applyProPriority(scored, usersMap);
 
-  // Step 6: Gemini explanations (for top results)
-  const topResults = ranked.slice(0, 5);
+  // Step 6: Honest Match Filtering (Requirement 2)
+  // Never show results below the minimum viable threshold (40%) in normal results.
+  const minViable = RIDE_CONFIG.matchQuality?.minimumViableScore || 40;
+  const viable = ranked.filter((m) => m.finalScore >= minViable);
+
+  let candidatesToShow = [];
+  let isFallback = false;
+
+  if (viable.length > 0) {
+    candidatesToShow = viable;
+  } else {
+    // Only provide fallback nearby/corridor commuters when candidates strictly satisfy fallback thresholds:
+    // Detour <= 4.0 km and Destination gap <= 3.5 km
+    const maxDetour = RIDE_CONFIG.matchQuality?.fallbackMaxDetourKm || 4.0;
+    const maxGap = RIDE_CONFIG.matchQuality?.fallbackMaxDestinationGapKm || 3.5;
+    const fallbackEligible = ranked.filter((m) => m.detourKm <= maxDetour && m.destinationDistanceKm <= maxGap);
+
+    if (fallbackEligible.length > 0) {
+      candidatesToShow = fallbackEligible;
+      isFallback = true;
+    }
+  }
+
+  // Step 7: Gemini explanations for top honest results
+  const topResults = candidatesToShow.slice(0, 5);
   for (const match of topResults) {
-    try {
-      const explanation = await geminiService.generateMatchExplanation({
-        routeOverlap: match.routeScore,
-        timeCompatibility: match.timeScore,
-        capacityCompatible: match.capacityCompatible,
-        budgetCompatible: match.budgetCompatible,
-        finalScore: match.finalScore,
-      });
-      match.explanation = explanation.explanation;
-    } catch (err) {
-      match.explanation = `${match.routeScore}% route overlap with ${match.timeScore}% timing compatibility.`;
+    match.isFallbackMatch = isFallback;
+    if (geminiService && typeof geminiService.generateMatchExplanation === 'function') {
+      try {
+        const explanation = await geminiService.generateMatchExplanation({
+          routeOverlap: match.routeScore,
+          timeCompatibility: match.timeScore,
+          destinationDistanceKm: match.destinationDistanceKm,
+          finalScore: match.finalScore,
+          matchType: match.matchType,
+          detourKm: match.detourKm,
+          qualityLabel: match.qualityLabel,
+        });
+        match.explanation = explanation.explanation;
+      } catch (err) {
+        match.explanation = `${match.qualityLabel}: ${match.routeScore}% route overlap with ${match.detourKm} km estimated detour.`;
+      }
+    } else {
+      match.explanation = `${match.qualityLabel}: ${match.routeScore}% route overlap with ${match.detourKm} km estimated detour.`;
     }
   }
 
@@ -260,9 +361,11 @@ async function findMatches(trip, tripUser, candidateTrips, candidateUsers, gemin
 }
 
 module.exports = {
+  haversineDistanceKm,
   computeTimeCompatibility,
   computeBudgetCompatibility,
   computeCapacityCompatibility,
+  classifyMatchType,
   scoreMatch,
   applyProPriority,
   findMatches,
