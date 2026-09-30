@@ -90,6 +90,12 @@ export function CreateTripPage() {
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleModel, setVehicleModel] = useState('');
 
+  // 2-minute token window state (booking window before broad broadcast)
+  const [tokenPhase, setTokenPhase] = useState<'idle' | 'waiting' | 'done'>('idle');
+  const [tokenSecondsLeft, setTokenSecondsLeft] = useState(120);
+  const tokenTimerRef = useRef<any>(null);
+  const pendingTripRef = useRef<any>(null);
+
   // 1. Contextual Location Permission Check & Quota on Mount (Requirement 4)
   useEffect(() => {
     fetchDailyQuota();
@@ -199,15 +205,43 @@ export function CreateTripPage() {
         destination: { address: destination, coordinates: destCoords },
         departureTime: departureMode === 'NOW' ? new Date().toISOString() : new Date(departureTime).toISOString(),
         timeWindow: 30,
-        seatCount: transportMode === 'BIKE' ? 1 : seats,
+        seatCount: transportMode === 'BIKE' ? 1 : Math.max(1, Math.min(seats, 7)),
         tolls,
         womenOnly,
         transportMode,
       });
 
-      navigate(`/matches/${trip._id}`);
+      // For travellers (drivers): start the 2-minute priority booking window
+      // Passengers with no driver match go straight to matches
+      if (role === 'driver') {
+        pendingTripRef.current = trip;
+        setTokenPhase('waiting');
+        setTokenSecondsLeft(120);
+
+        tokenTimerRef.current = setInterval(() => {
+          setTokenSecondsLeft((prev) => {
+            if (prev <= 1) {
+              clearInterval(tokenTimerRef.current);
+              setTokenPhase('done');
+              navigate(`/matches/${trip._id}`);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        navigate(`/matches/${trip._id}`);
+      }
     } catch {
       /* handled */
+    }
+  };
+
+  const handleSkipTokenWindow = () => {
+    clearInterval(tokenTimerRef.current);
+    setTokenPhase('idle');
+    if (pendingTripRef.current) {
+      navigate(`/matches/${pendingTripRef.current._id}`);
     }
   };
 
@@ -559,7 +593,7 @@ export function CreateTripPage() {
                 type="button"
                 onClick={() => {
                   setTransportMode('CAR');
-                  setSeats(2);
+                  setSeats((s) => Math.max(1, s));
                 }}
                 style={{
                   flex: 1,
@@ -577,7 +611,7 @@ export function CreateTripPage() {
                   cursor: 'pointer',
                 }}
               >
-                🚗 CAR (Up to 4)
+                🚗 CAR
               </button>
             </div>
           </div>
@@ -585,14 +619,83 @@ export function CreateTripPage() {
           {/* TRAVELLER SPECIFIC: SEATS & ESTIMATED FUEL EXPENSE */}
           {role === 'driver' && (
             <div style={{ padding: '16px', borderRadius: theme.radiusSm, background: 'rgba(246, 59, 3, 0.05)', marginBottom: '20px', border: `1px solid rgba(246, 59, 3, 0.2)` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <span style={{ fontSize: '0.8125rem', color: theme.cream }}>Available Seats Offered</span>
-                <span style={{ fontSize: '1rem', fontWeight: 800, color: theme.primary }}>{seats}</span>
-              </div>
+              {/* Seat count: BIKE = locked to 1, CAR = editable numeric input */}
+              {transportMode === 'BIKE' ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '0.8125rem', color: theme.cream }}>Available Seats Offered</span>
+                  <span style={{ fontSize: '1rem', fontWeight: 800, color: theme.primary }}>1 (Bike — fixed)</span>
+                </div>
+              ) : (
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: theme.muted, textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>
+                    Available Seats Offered (1–7)
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setSeats((s) => Math.max(1, s - 1))}
+                      style={{
+                        width: '36px', height: '36px', borderRadius: '50%',
+                        background: 'rgba(246,59,3,0.15)', border: `1.5px solid ${theme.primary}`,
+                        color: theme.primary, fontWeight: 800, fontSize: '1.25rem',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >−</button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={7}
+                      value={seats}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        if (!isNaN(v)) setSeats(Math.max(1, Math.min(v, 7)));
+                      }}
+                      style={{
+                        width: '56px', textAlign: 'center',
+                        background: 'rgba(255,248,229,0.07)',
+                        border: `1.5px solid ${theme.glassBorder}`,
+                        borderRadius: theme.radiusSm,
+                        color: theme.cream, fontWeight: 800, fontSize: '1.1rem',
+                        padding: '6px 4px',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSeats((s) => Math.min(7, s + 1))}
+                      style={{
+                        width: '36px', height: '36px', borderRadius: '50%',
+                        background: 'rgba(246,59,3,0.15)', border: `1.5px solid ${theme.primary}`,
+                        color: theme.primary, fontWeight: 800, fontSize: '1.25rem',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >+</button>
+                    <span style={{ fontSize: '0.75rem', color: theme.muted }}>seat{seats !== 1 ? 's' : ''}</span>
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.8125rem', color: theme.cream }}>Estimated Total Fuel Expense</span>
-                <span style={{ fontSize: '1rem', fontWeight: 800, color: theme.cream }}>₹{estimatedExpense}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.85rem', color: theme.muted }}>₹</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={estimatedExpense}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!isNaN(v) && v >= 0) setEstimatedExpense(v);
+                    }}
+                    style={{
+                      width: '72px', textAlign: 'right',
+                      background: 'rgba(255,248,229,0.07)',
+                      border: `1.5px solid ${theme.glassBorder}`,
+                      borderRadius: theme.radiusSm,
+                      color: theme.cream, fontWeight: 800, fontSize: '1rem',
+                      padding: '4px 6px',
+                    }}
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -686,6 +789,92 @@ export function CreateTripPage() {
             {role === 'passenger' ? 'Find a Ride →' : 'Publish Commute →'}
           </GlassButton>
         </GlassCard>
+
+        {/* 2-MINUTE TOKEN BOOKING WINDOW MODAL */}
+        <AnimatePresence>
+          {tokenPhase === 'waiting' && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0, 0, 0, 0.85)',
+                backdropFilter: 'blur(14px)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 100,
+                padding: '16px',
+              }}
+            >
+              <GlassCard style={{ padding: '32px 24px', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
+                {/* Countdown ring */}
+                <div style={{ position: 'relative', width: '100px', height: '100px', margin: '0 auto 20px' }}>
+                  <svg viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
+                    <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,248,229,0.08)" strokeWidth="8" />
+                    <circle
+                      cx="50" cy="50" r="44" fill="none"
+                      stroke={theme.primary}
+                      strokeWidth="8"
+                      strokeDasharray={`${2 * Math.PI * 44}`}
+                      strokeDashoffset={`${2 * Math.PI * 44 * (1 - tokenSecondsLeft / 120)}`}
+                      strokeLinecap="round"
+                      style={{ transition: 'stroke-dashoffset 1s linear' }}
+                    />
+                  </svg>
+                  <div style={{
+                    position: 'absolute', inset: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexDirection: 'column',
+                  }}>
+                    <span style={{ fontSize: '1.6rem', fontWeight: 900, color: theme.cream, lineHeight: 1 }}>{tokenSecondsLeft}</span>
+                    <span style={{ fontSize: '0.6rem', color: theme.muted, fontWeight: 600 }}>SEC</span>
+                  </div>
+                </div>
+
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: theme.cream, marginBottom: '8px' }}>
+                  🎟️ Priority Booking Window
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: theme.muted, marginBottom: '20px', lineHeight: 1.6 }}>
+                  Your commute is now live. Passengers who requested this route first get <strong style={{ color: theme.primary }}>2 minutes</strong> to confirm a seat before it opens to everyone.
+                </p>
+
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: theme.radiusSm,
+                  background: 'rgba(34, 197, 94, 0.1)',
+                  border: '1px solid rgba(34, 197, 94, 0.3)',
+                  fontSize: '0.75rem',
+                  color: '#22C55E',
+                  fontWeight: 600,
+                  marginBottom: '16px',
+                }}>
+                  ✓ {transportMode === 'BIKE' ? '1 seat' : `${seats} seat${seats !== 1 ? 's' : ''}`} available · {destination || 'Destination set'}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSkipTokenWindow}
+                  style={{
+                    width: '100%',
+                    padding: '11px',
+                    borderRadius: theme.radiusMd,
+                    background: 'transparent',
+                    border: `1px solid ${theme.glassBorder}`,
+                    color: theme.muted,
+                    fontWeight: 700,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Skip Window → Open to All Now
+                </button>
+              </GlassCard>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* TRAVELLER VERIFICATION MODAL */}
         <AnimatePresence>
