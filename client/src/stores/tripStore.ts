@@ -21,7 +21,7 @@ interface TripState {
   fetchTrip: (id: string) => Promise<void>;
   fetchDailyQuota: () => Promise<void>;
   createTrip: (data: Record<string, unknown>) => Promise<Trip>;
-  findMatches: (tripId: string) => Promise<void>;
+  findMatches: (tripId: string, isBackground?: boolean) => Promise<void>;
   acceptMatch: (matchId: string) => Promise<void>;
   cancelTrip: (tripId: string) => Promise<void>;
   updateTripStatus: (tripId: string, status: string) => Promise<void>;
@@ -94,8 +94,10 @@ export const useTripStore = create<TripState>((set, get) => ({
     }
   },
 
-  findMatches: async (tripId) => {
-    set({ matchLoading: true, matches: [], error: null });
+  findMatches: async (tripId, isBackground = false) => {
+    if (!isBackground) {
+      set({ matchLoading: true, matches: [], error: null });
+    }
     try {
       const res = await matchAPI.find(tripId);
       set((state) => ({

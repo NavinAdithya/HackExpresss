@@ -34,7 +34,9 @@ const tripSchema = new mongoose.Schema(
     timeWindow: { type: Number, default: 30 }, // minutes flexibility
 
     // Capacity & budget
-    seatCount: { type: Number, default: 1, min: 1, max: 6 },
+    transportMode: { type: String, enum: ['BIKE', 'CAR'], default: 'CAR' },
+    vehicleModel: { type: String, default: '' },
+    seatCount: { type: Number, default: 1, min: 1, max: 8 },
     budgetMin: { type: Number, default: 0 },
     budgetMax: { type: Number, default: 500 },
     tolls: { type: Number, default: 0 },

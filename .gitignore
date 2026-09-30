@@ -29,3 +29,4 @@ Thumbs.db
 *.sw?
 
 .vercel
+.env*

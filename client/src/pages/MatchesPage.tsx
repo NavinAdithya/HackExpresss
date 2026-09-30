@@ -231,6 +231,28 @@ function MatchCard({
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
         <MatchTypeBadge type={match.matchType} />
 
+        {/* Transport Vehicle / Seats Badge */}
+        {Boolean((match as any).transportMode || (match as any).vehicleModel) && (
+          <span
+            style={{
+              fontSize: '0.6875rem',
+              color: '#FFF8E5',
+              background: 'rgba(246, 59, 3, 0.18)',
+              border: `1px solid ${theme.primary}`,
+              padding: '3px 8px',
+              borderRadius: theme.radiusSm,
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            {(match as any).transportMode === 'BIKE' ? '🏍️ BIKE' : '🚗 CAR'}
+            {(match as any).vehicleModel ? ` · ${(match as any).vehicleModel}` : ''}
+            {(match as any).seatCount && (match as any).seatCount > 1 ? ` (${(match as any).seatCount} seats)` : ''}
+          </span>
+        )}
+
         {match.detourKm !== undefined && (
           <span style={{ fontSize: '0.6875rem', color: theme.muted, background: 'rgba(255,248,229,0.05)', padding: '4px 8px', borderRadius: theme.radiusSm }}>
             Detour: <strong>{match.detourKm} km</strong>
@@ -329,12 +351,60 @@ export function MatchesPage() {
   const [scanStepIndex, setScanStepIndex] = useState(0);
   const [inspectUser, setInspectUser] = useState<{ id: string; name: string; score: number } | null>(null);
 
+  // 2-Minute continuous live corridor radar window
+  const [secondsRemaining, setSecondsRemaining] = useState(120);
+  const [isWindowActive, setIsWindowActive] = useState(true);
+  const [isPolling, setIsPolling] = useState(false);
+  const timerRef = useRef<any>(null);
+  const pollRef = useRef<any>(null);
+
+  const startWindow = () => {
+    setSecondsRemaining(120);
+    setIsWindowActive(true);
+    if (tripId) {
+      findMatches(tripId, false);
+    }
+  };
+
   useEffect(() => {
     if (tripId) {
       fetchTrip(tripId);
       findMatches(tripId);
+      setSecondsRemaining(120);
+      setIsWindowActive(true);
     }
   }, [tripId]);
+
+  // 1-second countdown timer for the 2-minute token window
+  useEffect(() => {
+    if (!isWindowActive) return;
+
+    timerRef.current = setInterval(() => {
+      setSecondsRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current);
+          setIsWindowActive(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timerRef.current);
+  }, [isWindowActive]);
+
+  // Continuous background polling (every 3.5s) while the 2-minute window is active
+  useEffect(() => {
+    if (!isWindowActive || !tripId) return;
+
+    pollRef.current = setInterval(async () => {
+      setIsPolling(true);
+      await findMatches(tripId, true);
+      setIsPolling(false);
+    }, 3500);
+
+    return () => clearInterval(pollRef.current);
+  }, [isWindowActive, tripId]);
 
   // Cinematic scanning animation step progression
   useEffect(() => {
@@ -368,6 +438,13 @@ export function MatchesPage() {
   const safeMatches = Array.isArray(matches) ? matches : [];
   const hasExact = safeMatches.some((m) => m.matchType === 'EXACT_DESTINATION');
   const isFallbackOnly = safeMatches.length > 0 && safeMatches.every((m) => m.isFallbackMatch || m.finalScore < 60);
+  const isDriver = currentTrip?.role === 'driver';
+
+  const formatTimer = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   return (
     <PageTransition>
@@ -383,7 +460,7 @@ export function MatchesPage() {
             </motion.button>
             <div>
               <h1 style={{ fontWeight: 800, fontSize: '1.45rem', color: theme.cream, letterSpacing: '-0.02em' }}>
-                Compatible Commuters
+                {isDriver ? 'Share My Commute — Matching' : 'Find a Ride — Corridor Matches'}
               </h1>
               {currentTrip && (
                 <p style={{ color: theme.muted, fontSize: '0.8125rem' }}>
@@ -392,6 +469,142 @@ export function MatchesPage() {
               )}
             </div>
           </div>
+
+          {/* 2-MINUTE LIVE RADAR & TOKEN WINDOW BANNER (Runs side-by-side with match discovery) */}
+          <GlassCard
+            style={{
+              padding: '16px 18px',
+              marginBottom: '16px',
+              background: isWindowActive
+                ? 'linear-gradient(135deg, rgba(246, 59, 3, 0.12) 0%, rgba(10, 10, 10, 0.85) 100%)'
+                : 'rgba(255, 248, 229, 0.03)',
+              border: `1.5px solid ${isWindowActive ? theme.primary : theme.glassBorder}`,
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px' }}>
+              {/* Circular SVG Countdown Ring */}
+              <div style={{ position: 'relative', width: '64px', height: '64px', flexShrink: 0 }}>
+                <svg viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,248,229,0.08)" strokeWidth="8" />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="42"
+                    fill="none"
+                    stroke={secondsRemaining > 30 ? theme.primary : '#F59E0B'}
+                    strokeWidth="8"
+                    strokeDasharray={`${2 * Math.PI * 42}`}
+                    strokeDashoffset={`${2 * Math.PI * 42 * (1 - secondsRemaining / 120)}`}
+                    strokeLinecap="round"
+                    style={{ transition: 'stroke-dashoffset 1s linear' }}
+                  />
+                </svg>
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <span style={{ fontSize: '0.82rem', fontWeight: 900, color: theme.cream, fontFeatureSettings: "'tnum' on" }}>
+                    {formatTimer(secondsRemaining)}
+                  </span>
+                  <span style={{ fontSize: '0.52rem', color: isWindowActive ? theme.primary : theme.muted, fontWeight: 700 }}>
+                    {isWindowActive ? 'LIVE' : 'ENDED'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Status & Phase Details */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <span
+                    style={{
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      color: isWindowActive ? theme.primary : theme.muted,
+                      background: isWindowActive ? 'rgba(246,59,3,0.15)' : 'rgba(255,248,229,0.05)',
+                      padding: '2px 8px',
+                      borderRadius: theme.radiusFull,
+                    }}
+                  >
+                    {isDriver ? '🎟️ PRIORITY WINDOW' : '🧭 2-MIN RADAR SCAN'}
+                  </span>
+                  {isPolling && (
+                    <span style={{ fontSize: '0.65rem', color: '#22C55E', fontWeight: 600 }}>
+                      ⚡ Polling corridor...
+                    </span>
+                  )}
+                </div>
+
+                <h3 style={{ fontSize: '0.92rem', fontWeight: 800, color: theme.cream, marginBottom: '2px', lineHeight: 1.3 }}>
+                  {isDriver
+                    ? 'Awaiting Passenger Bookings Along Corridor'
+                    : 'Continuously Scanning For Available Rides & Vehicles'}
+                </h3>
+
+                <p style={{ fontSize: '0.72rem', color: theme.muted, lineHeight: 1.4, margin: 0 }}>
+                  {isWindowActive
+                    ? secondsRemaining > 60
+                      ? '⚡ Phase 1 (Priority): Matching direct route commuters & verified peers.'
+                      : '🌐 Phase 2 (Expanded): Scanning nearby route corridors & flexible detours.'
+                    : `Window complete. Found ${safeMatches.length} commute option(s) below.`}
+                </p>
+              </div>
+
+              {/* Quick Action: Scan Now or +2 Min */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end', flexShrink: 0 }}>
+                {isWindowActive ? (
+                  <button
+                    type="button"
+                    onClick={() => findMatches(tripId!, true)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: theme.radiusSm,
+                      background: 'rgba(246, 59, 3, 0.15)',
+                      border: `1px solid ${theme.primary}`,
+                      color: theme.cream,
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <span>🔄</span> Scan Now
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startWindow}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: theme.radiusSm,
+                      background: theme.primary,
+                      border: 'none',
+                      color: '#FFF8E5',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <span>🔄</span> +2 Min
+                  </button>
+                )}
+              </div>
+            </div>
+          </GlassCard>
 
           {/* Daily Commute Quota Bar */}
           <div
@@ -475,6 +688,30 @@ export function MatchesPage() {
           </GlassCard>
         ) : safeMatches.length > 0 ? (
           <div>
+            {/* Live discovery count banner */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '8px 14px',
+                borderRadius: theme.radiusSm,
+                background: 'rgba(34, 197, 94, 0.08)',
+                border: '1px solid rgba(34, 197, 94, 0.25)',
+                marginBottom: '14px',
+                fontSize: '0.75rem',
+              }}
+            >
+              <span style={{ color: '#22C55E', fontWeight: 700 }}>
+                ✓ Found {safeMatches.length} available commute{safeMatches.length !== 1 ? 's' : ''} along your corridor
+              </span>
+              {isWindowActive && (
+                <span style={{ color: theme.muted, fontSize: '0.7rem' }}>
+                  Radar live ({formatTimer(secondsRemaining)}) · Auto-refreshing
+                </span>
+              )}
+            </div>
+
             {/* Fallback Banner (Requirement 2): Only show "Try nearby commuters" when eligible */}
             {isFallbackOnly ? (
               <div
@@ -525,8 +762,41 @@ export function MatchesPage() {
               ))}
             </StaggerContainer>
           </div>
+        ) : isWindowActive ? (
+          /* Active Radar Searching State (During 2-Minute Window while waiting for commuters) */
+          <GlassCard style={{ padding: '36px 20px', textAlign: 'center', background: 'rgba(246, 59, 3, 0.04)' }}>
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2.5, repeat: Infinity, ease: 'linear' }}
+              style={{ fontSize: '2.5rem', marginBottom: '14px', display: 'inline-block' }}
+            >
+              🧭
+            </motion.div>
+
+            <h3 style={{ fontSize: '1.18rem', fontWeight: 800, color: theme.cream, marginBottom: '6px' }}>
+              {isDriver
+                ? 'Broadcasting Route to Commuters...'
+                : 'Actively Scanning for Available Rides & Vehicles...'}
+            </h3>
+
+            <p style={{ color: theme.primary, fontSize: '0.82rem', fontWeight: 700, marginBottom: '14px' }}>
+              {isDriver
+                ? 'Awaiting priority passenger booking confirmations on your route'
+                : 'Looking for departing bikes and cars along your corridor'}
+            </p>
+
+            <p style={{ color: theme.muted, fontSize: '0.78rem', maxWidth: '420px', margin: '0 auto 18px', lineHeight: 1.5 }}>
+              Radar is continuously sweeping the Chennai transit network. Commuters and vehicles will appear live on this screen as soon as they become available.
+            </p>
+
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 14px', borderRadius: theme.radiusFull, background: 'rgba(255,248,229,0.06)', border: `1px solid ${theme.glassBorder}`, fontSize: '0.72rem', color: theme.cream }}>
+              <span style={{ color: '#22C55E' }}>● Live Radar Active</span>
+              <span>·</span>
+              <span>Window: {formatTimer(secondsRemaining)} remaining</span>
+            </div>
+          </GlassCard>
         ) : (
-          /* Required Empty State: No passengers available right now. Your daily commute allowance was not used. */
+          /* Finalized Empty State: Only when 2-minute window finishes and 0 matches are found */
           <GlassCard style={{ padding: '36px 20px', textAlign: 'center' }}>
             <span style={{ fontSize: '2.5rem', marginBottom: '14px', display: 'block' }}>🛡️</span>
             
@@ -550,7 +820,7 @@ export function MatchesPage() {
             </div>
 
             <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: theme.cream, marginBottom: '10px', lineHeight: 1.35 }}>
-              No passengers available right now. Your daily commute allowance was not used.
+              No companions active along this corridor right now.
             </h3>
             
             <p style={{ color: theme.muted, fontSize: '0.85rem', marginBottom: '22px', lineHeight: 1.5, maxWidth: '480px', margin: '0 auto 22px auto' }}>
@@ -561,8 +831,8 @@ export function MatchesPage() {
               <GlassButton variant="ghost" onClick={() => navigate('/create-trip')}>
                 Adjust Route
               </GlassButton>
-              <GlassButton onClick={() => findMatches(tripId!)}>
-                Scan Again 🔄
+              <GlassButton onClick={startWindow}>
+                Restart 2-Min Radar 🔄
               </GlassButton>
             </div>
           </GlassCard>
