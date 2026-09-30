@@ -122,4 +122,13 @@ export const analyticsAPI = {
   advanced: () => api.get('/analytics/advanced'),
 };
 
+// === Routes & Dijkstra Navigation ===
+export const routesAPI = {
+  getNodes: () => api.get('/routes/nodes'),
+  calculateDijkstra: (origin: [number, number], destination: [number, number]) =>
+    api.post('/routes/dijkstra', { origin, destination }),
+  calculate: (origin: [number, number], destination: [number, number], algorithm?: string) =>
+    api.post('/routes/calculate', { origin, destination, algorithm }),
+};
+
 export default api;

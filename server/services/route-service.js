@@ -5,17 +5,24 @@
  */
 
 const { getRedis } = require('../config/redis');
+const { calculateDijkstraRoute } = require('./dijkstra-routing');
 
 const OSRM_URL = process.env.OSRM_URL || 'https://router.project-osrm.org';
 const CACHE_TTL = 3600; // 1 hour
 
 /**
- * Calculate route between two points using OSRM.
+ * Calculate route between two points using OSRM, with Dijkstra fallback.
  * @param {[number, number]} origin - [lng, lat]
  * @param {[number, number]} destination - [lng, lat]
+ * @param {object} [options] - Routing options (e.g. { algorithm: 'dijkstra' })
  * @returns {{ geometry, distance, duration }}
  */
-async function calculateRoute(origin, destination) {
+async function calculateRoute(origin, destination, options = {}) {
+  // If caller specifically requested Dijkstra algorithm, use it directly
+  if (options.algorithm === 'dijkstra' || options.useDijkstra) {
+    return calculateDijkstraRoute(origin, destination, options);
+  }
+
   const cacheKey = `route:${origin.join(',')}-${destination.join(',')}`;
   const redis = getRedis();
 
@@ -66,8 +73,13 @@ async function calculateRoute(origin, destination) {
     return result;
   } catch (err) {
     clearTimeout(timeout);
-    console.error('[ROUTE] OSRM error:', err.message);
-    throw new Error('Route calculation failed. Please try again.');
+    console.warn('[ROUTE] OSRM unavailable, falling back to Dijkstra routing algorithm:', err.message);
+    try {
+      return calculateDijkstraRoute(origin, destination, options);
+    } catch (dijkstraErr) {
+      console.error('[ROUTE] Dijkstra fallback error:', dijkstraErr.message);
+      throw new Error('Route calculation failed. Please try again.');
+    }
   }
 }
 
@@ -167,6 +179,7 @@ function dotProduct(point, segA, segB) {
 
 module.exports = {
   calculateRoute,
+  calculateDijkstraRoute,
   calculateRouteOverlap,
   haversineDistance,
   pointToSegmentDistance,
