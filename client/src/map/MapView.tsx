@@ -67,10 +67,10 @@ export function MapView({
       attributionControl: false,
     });
 
-    // Dark Matter tile layer
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // OpenStreetMap dark-mode tile layer (using PO → PO dark filter in index.css)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      subdomains: 'abcd',
+      subdomains: 'abc',
     }).addTo(map);
 
     nearbyLayersRef.current = L.layerGroup().addTo(map);

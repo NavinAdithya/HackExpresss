@@ -4,7 +4,9 @@ import '../services/location_service.dart';
 import 'matches_screen.dart';
 
 class FindRideScreen extends StatefulWidget {
-  const FindRideScreen({Key? key}) : super(key: key);
+  final String? preselectedDestination;
+
+  const FindRideScreen({Key? key, this.preselectedDestination}) : super(key: key);
 
   @override
   State<FindRideScreen> createState() => _FindRideScreenState();
@@ -58,6 +60,9 @@ class _FindRideScreenState extends State<FindRideScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.preselectedDestination != null) {
+      _destinationController.text = widget.preselectedDestination!;
+    }
     _requestLocation();
   }
 
@@ -73,11 +78,13 @@ class _FindRideScreenState extends State<FindRideScreen> {
       setState(() {
         _origin = 'Current location: $area';
         _locating = false;
+        _locationDenied = false;
       });
     } else {
       setState(() {
-        _origin = 'Current location: Velachery, Chennai';
+        _origin = 'Current location: Velachery, Chennai (Manual)';
         _locating = false;
+        _locationDenied = true;
       });
     }
   }
@@ -159,6 +166,28 @@ class _FindRideScreenState extends State<FindRideScreen> {
                 ],
               ),
             ),
+            if (_locationDenied) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 14, color: POTheme.dustPink),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'Location access helps PO → PO find commuters near your route.',
+                      style: TextStyle(color: POTheme.dustPink, fontSize: 11),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _requestLocation,
+                    child: const Text(
+                      'Enable GPS',
+                      style: TextStyle(color: POTheme.primary, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 18),
 
             // Destination / Autocomplete

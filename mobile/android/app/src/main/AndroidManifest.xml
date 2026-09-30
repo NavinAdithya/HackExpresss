@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.popo.commute">
+    package="com.popo.popo_mobile">
 
     <!-- PO → PO Native Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />

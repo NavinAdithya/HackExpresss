@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'core/theme.dart';
-import 'screens/find_ride_screen.dart';
+import 'screens/home_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +16,7 @@ class POPOApp extends StatelessWidget {
       title: 'PO → PO',
       debugShowCheckedModeBanner: false,
       theme: POTheme.darkTheme,
-      home: const FindRideScreen(),
+      home: const HomeScreen(),
     );
   }
 }
