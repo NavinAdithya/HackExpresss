@@ -11,6 +11,11 @@ const connectDB = require('./config/db');
 const User = require('./models/User');
 const Trip = require('./models/Trip');
 const Rating = require('./models/Rating');
+const Community = require('./models/Community');
+const CommunityMember = require('./models/CommunityMember');
+const DailyCommute = require('./models/DailyCommute');
+const { COMMUNITY_SEED, COMMUTE_SEED, dimsFromStars, straightRoute } = require('./config/community-seed');
+const { tripRatingOverall, refreshBehaviorTrust } = require('./services/behavior-trust');
 const { calculateRoute } = require('./services/route-service');
 const { computeUserTrustScore } = require('./services/trust-score');
 
@@ -191,6 +196,9 @@ async function seed() {
     await User.deleteMany({});
     await Trip.deleteMany({});
     await Rating.deleteMany({});
+    await Community.deleteMany({});
+    await CommunityMember.deleteMany({});
+    await DailyCommute.deleteMany({});
     console.log('  ✓ Cleared existing data');
 
     // Create users
@@ -263,6 +271,8 @@ async function seed() {
       ratedUser: users[1]._id,
       trip: trips[0]._id,
       rating: 5,
+      ...dimsFromStars(5, 0),
+      overall: tripRatingOverall(dimsFromStars(5, 0)),
       comment: 'Very safe driver, arrived on time!',
     });
 
@@ -271,15 +281,52 @@ async function seed() {
       ratedUser: users[0]._id,
       trip: trips[0]._id,
       rating: 4,
+      ...dimsFromStars(4, 1),
+      overall: tripRatingOverall(dimsFromStars(4, 1)),
       comment: 'Great co-passenger, friendly conversation.',
     });
 
     console.log('  ✓ Created sample ratings');
 
+    // Communities + memberships
+    const userByPhone = {};
+    users.forEach((u) => { userByPhone[u.phone] = u; });
+    for (const c of COMMUNITY_SEED) {
+      const community = await Community.create({
+        name: c.name, slug: c.key, category: c.category, description: c.description, memberCount: 0,
+      });
+      let count = 0;
+      for (const phone of c.members) {
+        if (!userByPhone[phone]) continue;
+        await CommunityMember.create({ communityId: community._id, userId: userByPhone[phone]._id });
+        count++;
+      }
+      community.memberCount = count;
+      await community.save();
+    }
+    console.log(`  ✓ Created ${COMMUNITY_SEED.length} communities`);
+
+    // Recurring commutes (offline straight-line routes; real routes are computed when users save commutes)
+    for (const c of COMMUTE_SEED) {
+      const u = userByPhone[c.phone];
+      if (!u) continue;
+      await DailyCommute.create({
+        userId: u._id, label: c.label,
+        origin: { address: c.origin.address, location: { type: 'Point', coordinates: c.origin.coordinates } },
+        destination: { address: c.destination.address, location: { type: 'Point', coordinates: c.destination.coordinates } },
+        route: straightRoute(c.origin.coordinates, c.destination.coordinates),
+        routeDistance: 9000, routeDuration: 1200,
+        departureTime: c.departureTime, days: c.days, role: c.role, transportMode: c.transportMode,
+        availableSeats: c.availableSeats, requiredSeats: c.requiredSeats,
+      });
+    }
+    console.log(`  ✓ Created ${COMMUTE_SEED.length} recurring commutes`);
+
     // Recompute authoritative deterministic trust scores from seeded activity
     for (const u of users) {
       const res = await computeUserTrustScore(u._id);
       console.log(`  ✓ Trust score computed: ${u.name} → ${res.score}/100 (${res.tier})`);
+      await refreshBehaviorTrust(u._id);
     }
 
     console.log('\n╔══════════════════════════════════════════╗');

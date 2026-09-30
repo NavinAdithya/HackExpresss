@@ -29,6 +29,13 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    // Behavioural trust (5 parameters, 1–10) — cached summary, recomputed on rating writes.
+    // See services/behavior-trust.js. null until first computed.
+    behaviorTrust: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+
     // Traveller Verification Status (Section 14)
     driverStatus: {
       type: String,

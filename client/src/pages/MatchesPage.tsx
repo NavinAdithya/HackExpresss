@@ -24,7 +24,7 @@ import { GlassSurface, GlassButton, GlassCard, PlanBadge } from '../glass';
 import { PageTransition, FadeReveal, StaggerContainer, StaggerItem } from '../animations';
 import { useTripStore } from '../stores/tripStore';
 import { MapView } from '../map/MapView';
-import { TrustScoreModal } from '../components/TrustScoreModal';
+import { TrustBadge, ReasonList } from '../components/trust';
 import { theme } from '../theme';
 import type { MatchResult } from '../types';
 
@@ -109,12 +109,12 @@ function MatchCard({
   match,
   onAccept,
   accepting,
-  onInspectTrust,
+  onViewProfile,
 }: {
   match: MatchResult;
   onAccept: (id: string) => void;
   accepting: boolean;
-  onInspectTrust?: (user: { id: string; name: string; score: number }) => void;
+  onViewProfile?: (userId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -163,34 +163,10 @@ function MatchCard({
               <PlanBadge plan={match.userPlan as any} size="sm" />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px' }}>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onInspectTrust?.({
-                    id: match.userId,
-                    name: match.userName,
-                    score: match.userTrustScore,
-                  });
-                }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  background: 'rgba(34, 197, 94, 0.12)',
-                  border: '1px solid rgba(34, 197, 94, 0.3)',
-                  borderRadius: theme.radiusFull,
-                  padding: '2px 8px',
-                  color: '#22C55E',
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-                title="Click to view peer's verified Trust Score breakdown"
-              >
-                <span>Trust: {match.userTrustScore}/100</span>
-                <span style={{ fontSize: '0.625rem', opacity: 0.85, textDecoration: 'underline' }}>Why? ℹ️</span>
-              </button>
+              <TrustBadge
+                trust={match.userTrust}
+                onClick={() => onViewProfile?.(match.userId)}
+              />
               <span style={{ fontSize: '0.75rem', color: theme.muted }}>
                 {match.userGender === 'female' ? '♀️ Female' : '♂️ Male'}
               </span>
@@ -319,6 +295,22 @@ function MatchCard({
               <ScoreBar label="Destination Proximity" value={match.destinationScore || 85} color="#22C55E" />
               <ScoreBar label="Timing Compatibility" value={match.timeScore} color="#F59E0B" />
 
+              {match.reasons && match.reasons.length > 0 && (
+                <div style={{ marginTop: '14px' }}>
+                  <div style={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, marginBottom: '6px' }}>
+                    Why this match
+                  </div>
+                  <ReasonList reasons={match.reasons} />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onViewProfile?.(match.userId); }}
+                style={{ marginTop: '12px', background: 'none', border: 'none', padding: 0, color: theme.primary, fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
+              >
+                View profile →
+              </button>
+
               {match.proBoost && match.proBoost > 0 && (
                 <p style={{ fontSize: '0.6875rem', color: theme.primary, marginTop: '8px', fontWeight: 600 }}>
                   ⚡ PRO Priority: +{match.proBoost} rank boost
@@ -349,7 +341,6 @@ export function MatchesPage() {
   const { currentTrip, matches = [], matchLoading, dailyQuota, findMatches, acceptMatch, fetchTrip } = useTripStore();
   const [accepting, setAccepting] = useState('');
   const [scanStepIndex, setScanStepIndex] = useState(0);
-  const [inspectUser, setInspectUser] = useState<{ id: string; name: string; score: number } | null>(null);
 
   // 2-Minute continuous live corridor radar window
   const [secondsRemaining, setSecondsRemaining] = useState(120);
@@ -756,7 +747,7 @@ export function MatchesPage() {
                     match={match}
                     onAccept={handleAccept}
                     accepting={accepting === (match.matchId || match.tripId)}
-                    onInspectTrust={setInspectUser}
+                    onViewProfile={(id) => navigate(`/u/${id}`)}
                   />
                 </StaggerItem>
               ))}
@@ -838,16 +829,6 @@ export function MatchesPage() {
           </GlassCard>
         )}
 
-        {/* Peer Trust Score Breakdown Modal */}
-        {inspectUser && (
-          <TrustScoreModal
-            open={Boolean(inspectUser)}
-            onClose={() => setInspectUser(null)}
-            userId={inspectUser.id}
-            userName={inspectUser.name}
-            initialScore={inspectUser.score}
-          />
-        )}
       </div>
     </PageTransition>
   );

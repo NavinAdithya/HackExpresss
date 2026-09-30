@@ -59,6 +59,10 @@ const tripSchema = new mongoose.Schema(
     matchedUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     matchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Match', default: null },
 
+    // Provenance when this trip was generated from a saved Daily Commute
+    commuteId: { type: mongoose.Schema.Types.ObjectId, ref: 'DailyCommute', default: null },
+    commuteDate: { type: String, default: null }, // YYYY-MM-DD in the commuter's local time
+
     // Fare (populated on completion)
     fare: { type: Number, default: null },
     commission: { type: Number, default: null },

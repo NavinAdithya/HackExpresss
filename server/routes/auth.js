@@ -20,6 +20,7 @@ const { auth } = require('../middleware/auth');
 const { authLimiter } = require('../middleware/rateLimiter');
 const { registerReferenceFace } = require('../services/face-verification');
 const { computeUserTrustScore, calculateTrustScore } = require('../services/trust-score');
+const { getBehaviorTrust } = require('../services/behavior-trust');
 const { getDailyCommuteQuota } = require('../services/quota-service');
 
 const router = express.Router();
@@ -253,6 +254,7 @@ router.get('/me', auth, async (req, res) => {
     serialized.trustTier = trustData.tier;
     serialized.trustTierLabel = trustData.tierLabel;
     serialized.dailyQuota = dailyQuota;
+    serialized.behaviorTrust = await getBehaviorTrust(req.userId);
     res.json({ user: serialized });
   } catch (err) {
     console.error('[AUTH] /me error:', err);
@@ -413,6 +415,7 @@ function serializeUser(u) {
     subscriptionStatus: u.subscriptionStatus,
     trustScore: typeof u.trustScore === 'number' ? u.trustScore : 50,
     trustScoreBreakdown: u.trustScoreBreakdown || null,
+    behaviorTrust: u.behaviorTrust || null,
     profilePhoto: u.profilePhoto,
     womenOnly: u.womenOnly || false,
     trustedContacts: u.trustedContacts || [],

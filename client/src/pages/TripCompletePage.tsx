@@ -5,42 +5,26 @@
  * - Transparent Shared Travel Expense breakdown
  * - Separate PO → PO Platform Fee
  * - Environmental impact estimates (potential trips avoided, estimated emissions impact)
- * - Community trust rating
+ * - Trust rating (5 parameters, 1–10) for the other participant
  */
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { GlassSurface, GlassCard, GlassButton } from '../glass';
 import { PageTransition, FadeReveal } from '../animations';
 import { useTripStore } from '../stores/tripStore';
-import { ratingAPI } from '../services/api';
+import { TrustRatingForm } from '../components/TrustRatingForm';
 import { theme } from '../theme';
 
 export function TripCompletePage() {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
   const { currentTrip, fareBreakdown, fetchTrip } = useTripStore();
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState('');
-  const [submitted, setSubmitted] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (tripId) fetchTrip(tripId);
   }, [tripId]);
-
-  const handleSubmitRating = async () => {
-    if (!tripId || !rating) return;
-    setLoading(true);
-    try {
-      await ratingAPI.submit(tripId, rating, comment);
-      setSubmitted(true);
-    } catch {
-      setSubmitted(true);
-    }
-    setLoading(false);
-  };
 
   const sharedExpense = fareBreakdown?.poolFare || 50;
   const platformFee = 3.0;
@@ -173,64 +157,12 @@ export function TripCompletePage() {
           </GlassCard>
         </FadeReveal>
 
-        {/* Rating Card */}
-        <FadeReveal delay={0.3}>
-          <GlassCard style={{ padding: '24px', marginBottom: '24px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: theme.cream, marginBottom: '6px' }}>
-              Rate Your Peer Commuter
-            </h3>
-            <p style={{ color: theme.muted, fontSize: '0.8125rem', marginBottom: '16px' }}>
-              Builds transparent community trust score
-            </p>
-
-            {/* Star selector */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', fontSize: '2rem', marginBottom: '18px' }}>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <motion.button
-                  key={star}
-                  type="button"
-                  whileTap={{ scale: 0.85 }}
-                  onClick={() => setRating(star)}
-                  style={{
-                    color: star <= rating ? '#F59E0B' : 'rgba(255, 248, 229, 0.2)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  ★
-                </motion.button>
-              ))}
-            </div>
-
-            <textarea
-              placeholder="Leave a helpful comment on safety, punctuality, or route..."
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              style={{
-                width: '100%',
-                height: '80px',
-                padding: '12px',
-                borderRadius: theme.radiusMd,
-                background: 'rgba(255, 248, 229, 0.05)',
-                border: `1px solid ${theme.glassBorder}`,
-                color: theme.cream,
-                fontSize: '0.85rem',
-                outline: 'none',
-                resize: 'none',
-                marginBottom: '16px',
-              }}
-            />
-
-            <GlassButton
-              fullWidth
-              size="lg"
-              loading={loading}
-              disabled={submitted}
-              onClick={handleSubmitRating}
-            >
-              {submitted ? '✓ Rating Submitted' : 'Submit Community Rating'}
-            </GlassButton>
-          </GlassCard>
-        </FadeReveal>
+        {/* Trust rating — five parameters (1–10); server verifies participation & completion */}
+        {tripId && (
+          <FadeReveal delay={0.3}>
+            <TrustRatingForm tripId={tripId} />
+          </FadeReveal>
+        )}
 
         <GlassButton variant="ghost" fullWidth onClick={() => navigate('/')}>
           Return to Commute Hub →

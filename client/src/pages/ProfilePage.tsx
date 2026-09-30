@@ -18,10 +18,10 @@ import { GlassSurface, GlassCard, GlassButton, GlassInput, GlassPill, PlanBadge 
 import { PageTransition, FadeReveal, StaggerContainer, StaggerItem } from '../animations';
 import { useAuthStore } from '../stores/authStore';
 import { useTripStore } from '../stores/tripStore';
-import { contactAPI, analyticsAPI } from '../services/api';
-import { TrustScoreModal } from '../components/TrustScoreModal';
+import { contactAPI, analyticsAPI, trustAPI } from '../services/api';
+import { TrustCard, IdentityList, sectionLabel } from '../components/trust';
 import { theme } from '../theme';
-import type { TrustedContact } from '../types';
+import type { TrustedContact, PublicProfile } from '../types';
 
 export function ProfilePage() {
   const navigate = useNavigate();
@@ -31,7 +31,8 @@ export function ProfilePage() {
   const [newContact, setNewContact] = useState({ name: '', phone: '', circle: 'Family' });
   const [analytics, setAnalytics] = useState<any>(null);
   const [editing, setEditing] = useState(false);
-  const [showTrustModal, setShowTrustModal] = useState(false);
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [profileError, setProfileError] = useState(false);
   const [name, setName] = useState(user?.name || '');
   const [gender, setGender] = useState(user?.gender || 'other');
 
@@ -40,6 +41,13 @@ export function ProfilePage() {
     contactAPI.get().then((res) => setContacts(res.data.contacts)).catch(() => {});
     analyticsAPI.basic().then((res) => setAnalytics(res.data)).catch(() => {});
   }, []);
+
+  // Identity + behavioural trust + communities + reviews (server-cached summary; one request)
+  useEffect(() => {
+    if (!user?._id) return;
+    setProfileError(false);
+    trustAPI.profile(user._id).then((res) => setProfile(res.data)).catch(() => setProfileError(true));
+  }, [user?._id]);
 
   const addContact = async () => {
     if (!newContact.name || !newContact.phone) return;
@@ -154,27 +162,6 @@ export function ProfilePage() {
 
                   <PlanBadge plan={user.plan} size="md" />
 
-                  <button
-                    type="button"
-                    onClick={() => setShowTrustModal(true)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '4px 12px',
-                      borderRadius: theme.radiusFull,
-                      background: 'rgba(34, 197, 94, 0.15)',
-                      border: '1px solid rgba(34, 197, 94, 0.35)',
-                      color: '#22C55E',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                    title="Click to view why this Trust Score is calculated"
-                  >
-                    <span>Trust Score: {user.trustScore ?? 50} / 100</span>
-                    <span style={{ fontSize: '0.65rem', textDecoration: 'underline', opacity: 0.85 }}>Why? ℹ️</span>
-                  </button>
                 </div>
 
                 {/* Traveller Status */}
@@ -195,72 +182,88 @@ export function ProfilePage() {
           </GlassCard>
         </FadeReveal>
 
-        {/* Deterministic Trust Score Banner & Factor Breakdown */}
-        {user && (
-          <FadeReveal delay={0.06}>
-            <GlassCard
-              style={{
-                padding: '16px 20px',
-                marginBottom: '20px',
-                background: 'rgba(255, 248, 229, 0.03)',
-                border: '1px solid rgba(34, 197, 94, 0.25)',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div
+        {/* Identity — who is this person? (separate from behavioural trust) */}
+        <FadeReveal delay={0.05}>
+          <GlassCard style={{ padding: '20px', marginBottom: '16px' }}>
+            {profile ? (
+              <IdentityList identity={profile.identity} />
+            ) : (
+              <ProfileSkeleton label="Identity" failed={profileError} />
+            )}
+          </GlassCard>
+        </FadeReveal>
+
+        {/* Trust — how have they behaved on shared journeys? 5 parameters, 1–10 */}
+        <FadeReveal delay={0.07}>
+          <GlassCard style={{ padding: '20px', marginBottom: '16px' }}>
+            {profile ? (
+              <TrustCard trust={profile.trust} />
+            ) : (
+              <ProfileSkeleton label="Trust" failed={profileError} />
+            )}
+            {profile && profile.trust.completedJourneys ? (
+              <p style={{ fontSize: '0.75rem', color: theme.muted, margin: '14px 0 0' }}>
+                {profile.trust.completedJourneys} completed shared journey{profile.trust.completedJourneys === 1 ? '' : 's'}
+              </p>
+            ) : null}
+          </GlassCard>
+        </FadeReveal>
+
+        {/* Communities */}
+        <FadeReveal delay={0.09}>
+          <GlassCard style={{ padding: '20px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={sectionLabel}>Communities</h3>
+              <button
+                type="button"
+                onClick={() => navigate('/communities')}
+                style={{ background: 'none', border: 'none', color: theme.primary, fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Browse →
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
+              {profile && profile.communities.length > 0 ? (
+                profile.communities.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => navigate(`/communities/${c.id}`)}
                     style={{
-                      width: '50px',
-                      height: '50px',
-                      borderRadius: '50%',
-                      background: 'rgba(34, 197, 94, 0.15)',
-                      border: '2px solid #22C55E',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 0 16px rgba(34, 197, 94, 0.2)',
-                      flexShrink: 0,
+                      padding: '4px 12px',
+                      borderRadius: theme.radiusFull,
+                      background: 'rgba(255, 248, 229, 0.05)',
+                      border: `1px solid ${theme.glassBorder}`,
+                      color: theme.cream,
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
                     }}
                   >
-                    <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#22C55E', lineHeight: 1, fontFeatureSettings: "'tnum' on" }}>
-                      {user.trustScore ?? 50}
-                    </span>
-                    <span style={{ fontSize: '0.5rem', fontWeight: 700, color: theme.muted }}>/100</span>
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.95rem', fontWeight: 800, color: theme.cream }}>
-                        PO → PO Trust Score
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '0.6875rem',
-                          fontWeight: 700,
-                          color: '#22C55E',
-                          background: 'rgba(34, 197, 94, 0.12)',
-                          padding: '2px 8px',
-                          borderRadius: theme.radiusFull,
-                          border: '1px solid rgba(34, 197, 94, 0.3)',
-                        }}
-                      >
-                        {user.trustTierLabel || (user.trustScore >= 90 ? 'Exceptional Trust' : user.trustScore >= 80 ? 'High Trust' : 'Verified Member')}
-                      </span>
-                    </div>
-                    <p style={{ fontSize: '0.72rem', color: theme.muted, margin: '3px 0 0' }}>
-                      Deterministically computed from verified identity, commutes, ratings & reliability.
-                    </p>
-                  </div>
-                </div>
+                    {c.name}
+                  </button>
+                ))
+              ) : (
+                <span style={{ fontSize: '0.8125rem', color: theme.muted }}>
+                  {profile ? 'Join a community to find people travelling your way.' : ' '}
+                </span>
+              )}
+            </div>
+          </GlassCard>
+        </FadeReveal>
 
-                <GlassButton
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowTrustModal(true)}
-                  style={{ borderColor: 'rgba(34, 197, 94, 0.35)', color: '#22C55E', fontSize: '0.75rem', fontWeight: 700 }}
-                >
-                  Why this score? ℹ️
-                </GlassButton>
+        {/* Reviews */}
+        {profile && profile.reviews.length > 0 && (
+          <FadeReveal delay={0.11}>
+            <GlassCard style={{ padding: '20px', marginBottom: '24px' }}>
+              <h3 style={sectionLabel}>Reviews</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
+                {profile.reviews.map((r, i) => (
+                  <blockquote key={i} style={{ margin: 0, fontSize: '0.85rem', color: theme.cream, lineHeight: 1.5 }}>
+                    “{r.comment}”
+                    <footer style={{ fontSize: '0.72rem', color: theme.muted, marginTop: '2px' }}>— {r.rater}</footer>
+                  </blockquote>
+                ))}
               </div>
             </GlassCard>
           </FadeReveal>
@@ -525,16 +528,18 @@ export function ProfilePage() {
           </div>
         </FadeReveal>
 
-        {/* Why this score? Interactive Breakdown Modal */}
-        {user && (
-          <TrustScoreModal
-            open={showTrustModal}
-            onClose={() => setShowTrustModal(false)}
-            initialScore={user.trustScore}
-            initialBreakdown={user.trustScoreBreakdown}
-          />
-        )}
       </div>
     </PageTransition>
+  );
+}
+
+function ProfileSkeleton({ label, failed }: { label: string; failed: boolean }) {
+  return (
+    <div>
+      <h3 style={sectionLabel}>{label}</h3>
+      <p style={{ fontSize: '0.8125rem', color: theme.muted, margin: '12px 0 0' }}>
+        {failed ? 'Could not load this right now. Please try again shortly.' : 'Loading…'}
+      </p>
+    </div>
   );
 }

@@ -18,6 +18,10 @@ import { PlansPage } from './pages/PlansPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { TripsPage } from './pages/TripsPage';
 import { TrackingPage } from './pages/TrackingPage';
+import { DailyCommutePage } from './pages/DailyCommutePage';
+import { CommunitiesPage } from './pages/CommunitiesPage';
+import { CommunityPage } from './pages/CommunityPage';
+import { PublicProfilePage } from './pages/PublicProfilePage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
@@ -39,6 +43,10 @@ function AppRoutes() {
         <Route path="/trip/:tripId/complete" element={<TripCompletePage />} />
         <Route path="/plans" element={<PlansPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/u/:userId" element={<PublicProfilePage />} />
+        <Route path="/commute" element={<DailyCommutePage />} />
+        <Route path="/communities" element={<CommunitiesPage />} />
+        <Route path="/communities/:communityId" element={<CommunityPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

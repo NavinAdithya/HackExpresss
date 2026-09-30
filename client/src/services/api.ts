@@ -78,10 +78,46 @@ export const matchAPI = {
 };
 
 // === Ratings ===
+export type TrustScores = {
+  reliability: number;
+  safety: number;
+  respect: number;
+  routeCommitment: number;
+  communication: number;
+};
+
 export const ratingAPI = {
-  submit: (tripId: string, rating: number, comment?: string) =>
-    api.post('/ratings', { tripId, rating, comment }),
+  submit: (tripId: string, scores: TrustScores, comment?: string) =>
+    api.post('/ratings', { tripId, ...scores, comment }),
+  eligibility: (tripId: string) => api.get(`/ratings/eligibility/${tripId}`),
   getForUser: (userId: string) => api.get(`/ratings/user/${userId}`),
+};
+
+// === Trust & public profiles ===
+export const trustAPI = {
+  profile: (userId: string) => api.get(`/trust/user/${userId}`),
+};
+
+// === Daily Commute ===
+export const commuteAPI = {
+  list: () => api.get('/commutes'),
+  create: (data: Record<string, unknown>) => api.post('/commutes', data),
+  update: (id: string, data: Record<string, unknown>) => api.put(`/commutes/${id}`, data),
+  remove: (id: string) => api.delete(`/commutes/${id}`),
+  today: () => api.get('/commutes/today'),
+  matches: (id: string) => api.get(`/commutes/${id}/matches`),
+  requests: () => api.get('/commutes/requests'),
+  request: (id: string, data: { targetKind: string; targetId: string; targetUserId: string; asRole: string }) =>
+    api.post(`/commutes/${id}/request`, data),
+};
+
+// === Communities ===
+export const communityAPI = {
+  list: () => api.get('/communities'),
+  get: (id: string) => api.get(`/communities/${id}`),
+  join: (id: string) => api.post(`/communities/${id}/join`),
+  leave: (id: string) => api.delete(`/communities/${id}/leave`),
+  create: (data: { name: string; category: string; description?: string }) => api.post('/communities', data),
 };
 
 // === SOS ===

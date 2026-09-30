@@ -35,6 +35,17 @@ const RIDE_CONFIG = {
     budget: 0.05,       // 5% Cost compatibility
   },
 
+  // Trust + community ranking signals (applied after safety hard-filters and scoring).
+  rankingSignals: {
+    neutralTrust: 7,            // overall trust (1–10) that neither helps nor hurts
+    pointsPerTrustPoint: 1.5,   // rank points per trust point above/below neutral
+    maxTrustBoost: 3,
+    maxTrustPenalty: 4,
+    fullConfidenceAtRatings: 5, // trust adjustment is scaled down below this many ratings
+    communityBoost: 3,          // sharing at least one community
+    cityAvgSpeedKmh: 25,        // detour km → minutes estimate
+  },
+
   proPriorityBonus: 3, // Ranking boost applied ONLY after safety hard filters
   defaultTimeWindowMinutes: 30,
   maxDetourKm: 4.0, // Maximum acceptable detour in km for fallback

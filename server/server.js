@@ -31,6 +31,9 @@ const contactRoutes = require('./routes/contacts');
 const analyticsRoutes = require('./routes/analytics');
 const placesRoutes = require('./routes/places');
 const routeRoutes = require('./routes/routes');
+const commuteRoutes = require('./routes/commutes');
+const communityRoutes = require('./routes/communities');
+const trustRoutes = require('./routes/trust');
 
 const app = express();
 app.set('trust proxy', 1); // Enable proxy header trusting for Vercel
@@ -97,6 +100,9 @@ app.use('/api/contacts', contactRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/places', placesRoutes);
 app.use('/api/routes', routeRoutes);
+app.use('/api/commutes', commuteRoutes);
+app.use('/api/communities', communityRoutes);
+app.use('/api/trust', trustRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

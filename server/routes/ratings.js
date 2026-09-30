@@ -1,69 +1,38 @@
 /**
  * Rating Routes
  *
- * POST /api/ratings          → Submit a rating after trip completion
- * GET  /api/ratings/user/:id → Get ratings for a user
+ * POST /api/ratings                   → rate the other participant of a completed shared journey
+ *                                       (five parameters, each 1–10, plus optional comment)
+ * GET  /api/ratings/eligibility/:tripId → can I rate this trip, and who?
+ * GET  /api/ratings/user/:id          → ratings received by a user
  */
 
 const express = require('express');
 const Rating = require('../models/Rating');
-const User = require('../models/User');
-const Trip = require('../models/Trip');
 const { auth } = require('../middleware/auth');
-const { computeUserTrustScore } = require('../services/trust-score');
+const { submitRating, resolveRatingContext } = require('../services/rating-service');
+const { TRUST_PARAMS, computeBehaviorTrust } = require('../services/behavior-trust');
 
 const router = express.Router();
 
 /**
- * POST /api/ratings — Submit a rating
+ * POST /api/ratings
  */
 router.post('/', auth, async (req, res) => {
   try {
-    const { tripId, rating, comment } = req.body;
+    const { tripId } = req.body || {};
+    if (!tripId) return res.status(400).json({ error: 'Trip ID is required.', code: 'INVALID_SCORES' });
 
-    if (!tripId || !rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ error: 'Trip ID and rating (1–5) required.' });
+    const result = await submitRating({ raterId: req.userId, tripId, body: req.body });
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.message, code: result.code });
     }
-
-    const trip = await Trip.findById(tripId);
-    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
-
-    if (trip.status !== 'COMPLETED') {
-      return res.status(400).json({ error: 'Can only rate completed trips.' });
-    }
-
-    // Determine who is being rated
-    const isOwner = trip.userId.toString() === req.userId.toString();
-    const isMatchedUser = trip.matchedUserId?.toString() === req.userId.toString();
-
-    if (!isOwner && !isMatchedUser) {
-      return res.status(403).json({ error: 'You are not part of this trip.' });
-    }
-
-    const ratedUserId = isOwner ? trip.matchedUserId : trip.userId;
-
-    // Check for duplicate
-    const existing = await Rating.findOne({ rater: req.userId, trip: tripId });
-    if (existing) {
-      return res.status(400).json({ error: 'You have already rated this trip.' });
-    }
-
-    const ratingDoc = await Rating.create({
-      rater: req.userId,
-      ratedUser: ratedUserId,
-      trip: tripId,
-      rating,
-      comment: comment || '',
-    });
-
-    // Recompute authoritative trust score for rated user from actual activity
-    const trustData = await computeUserTrustScore(ratedUserId);
 
     res.status(201).json({
-      rating: ratingDoc,
-      newTrustScore: trustData.score,
-      trustScoreBreakdown: trustData.breakdown,
-      trustScoreFactors: trustData.factors,
+      rating: result.rating,
+      tripRating: result.overall,
+      ratedUser: { _id: String(result.ratedUser._id), name: result.ratedUser.name },
+      trust: result.trust,
     });
   } catch (err) {
     console.error('[RATINGS] create error:', err);
@@ -72,7 +41,27 @@ router.post('/', auth, async (req, res) => {
 });
 
 /**
- * GET /api/ratings/user/:id — Get ratings for a user
+ * GET /api/ratings/eligibility/:tripId
+ */
+router.get('/eligibility/:tripId', auth, async (req, res) => {
+  try {
+    const ctx = await resolveRatingContext(req.params.tripId, req.userId);
+    if (!ctx.ok) {
+      return res.json({ eligible: false, code: ctx.code, reason: ctx.message });
+    }
+    res.json({
+      eligible: true,
+      ratedUser: { _id: String(ctx.ratedUser._id), name: ctx.ratedUser.name },
+      parameters: TRUST_PARAMS,
+    });
+  } catch (err) {
+    console.error('[RATINGS] eligibility error:', err);
+    res.status(500).json({ error: 'Failed to check rating eligibility.' });
+  }
+});
+
+/**
+ * GET /api/ratings/user/:id — ratings received by a user
  */
 router.get('/user/:id', auth, async (req, res) => {
   try {
@@ -81,11 +70,12 @@ router.get('/user/:id', auth, async (req, res) => {
       .limit(20)
       .populate('rater', 'name profilePhoto');
 
+    const summary = computeBehaviorTrust(ratings);
     const avg = ratings.length > 0
       ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
       : null;
 
-    res.json({ ratings, average: avg, count: ratings.length });
+    res.json({ ratings, average: avg, count: ratings.length, trust: summary });
   } catch (err) {
     console.error('[RATINGS] get error:', err);
     res.status(500).json({ error: 'Failed to fetch ratings.' });

@@ -19,10 +19,14 @@ const matchSchema = new mongoose.Schema(
     // Gemini explanation
     explanation: { type: String, default: '' },
 
+    // Set when one party explicitly requests a shared journey (Daily Commute / Communities).
+    // The OTHER participant must accept — a requester cannot confirm their own request.
+    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+
     // Status
     status: {
       type: String,
-      enum: ['PENDING', 'ACCEPTED', 'DECLINED', 'EXPIRED'],
+      enum: ['PENDING', 'ACCEPTED', 'CONFIRMED', 'DECLINED', 'EXPIRED', 'CANCELLED'],
       default: 'PENDING',
     },
   },

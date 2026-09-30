@@ -17,6 +17,7 @@ const { findMatches } = require('../services/matching-engine');
 const { calculateFare } = require('../services/fare-calculator');
 const { validateRideConfirmationQuota, getDailyCommuteQuota } = require('../services/quota-service');
 const geminiService = require('../services/gemini-service');
+const { buildRankingContext } = require('../services/community-service');
 
 const router = express.Router();
 
@@ -54,9 +55,12 @@ router.post('/find/:tripId', auth, async (req, res) => {
 
     const tripUser = await User.findById(req.userId).select('-otp -otpExpiry');
 
+    // Trust + shared-community signals for ranking (cached summaries — no rating scans)
+    const context = await buildRankingContext(req.userId, candidateUsers);
+
     // Run matching pipeline
     const results = await findMatches(
-      trip, tripUser, candidateTrips, candidateUsers, geminiService
+      trip, tripUser, candidateTrips, candidateUsers, geminiService, { context }
     );
 
     // Enrich with shared cost breakdown & create pending Match records (0 quota consumed)
@@ -180,6 +184,14 @@ router.put('/:id/accept', auth, async (req, res) => {
       return res.status(403).json({ error: 'Access denied.' });
     }
 
+    // Requests created from Daily Commute / Communities need the OTHER commuter's consent.
+    if (match.requestedBy && String(match.requestedBy) === req.userId.toString()) {
+      return res.status(403).json({
+        error: 'AWAITING_OTHER_COMMUTER',
+        message: 'You requested this journey — the other commuter needs to accept it.',
+      });
+    }
+
     // CRITICAL: Validate daily ride quota for BOTH commuters before confirmation
     const quotaValidation = await validateRideConfirmationQuota(match.userA, match.userB);
     if (!quotaValidation.allowed) {
@@ -243,6 +255,10 @@ router.put('/:id/decline', auth, async (req, res) => {
   try {
     const match = await Match.findById(req.params.id);
     if (!match) return res.status(404).json({ error: 'Match not found.' });
+
+    if (match.userA.toString() !== req.userId.toString() && match.userB.toString() !== req.userId.toString()) {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
 
     match.status = 'DECLINED';
     await match.save();

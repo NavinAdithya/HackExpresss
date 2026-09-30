@@ -22,6 +22,7 @@ const { calculateRoute } = require('../services/route-service');
 const { calculateFare, calculateNoShowPenalty } = require('../services/fare-calculator');
 const { verifyFace, bothPartiesVerified } = require('../services/face-verification');
 const { computeUserTrustScore } = require('../services/trust-score');
+const { refreshBehaviorTrust } = require('../services/behavior-trust');
 const { getDailyCommuteQuota } = require('../services/quota-service');
 const RIDE_CONFIG = require('../config/ride');
 const { v4: uuidv4 } = require('uuid');
@@ -399,6 +400,14 @@ router.put('/:id/status', auth, async (req, res) => {
       trip.sharedTrackingToken = trip.sharedTrackingToken || uuidv4();
     }
 
+    // A journey can only be completed once it is underway (keeps ratings tied to real journeys).
+    if (status === 'COMPLETED' && !['IN_PROGRESS', 'COMPLETED'].includes(trip.status)) {
+      return res.status(400).json({
+        error: 'TRIP_NOT_IN_PROGRESS',
+        message: 'A commute can only be completed after it has started.',
+      });
+    }
+
     // Handle completion
     if (status === 'COMPLETED') {
       trip.completedAt = new Date();
@@ -438,8 +447,10 @@ router.put('/:id/status', auth, async (req, res) => {
     // Recompute authoritative trust score for affected participants
     if (status === 'COMPLETED') {
       await computeUserTrustScore(trip.userId);
+      await refreshBehaviorTrust(trip.userId);
       if (trip.matchedUserId) {
         await computeUserTrustScore(trip.matchedUserId);
+        await refreshBehaviorTrust(trip.matchedUserId);
       }
     } else if (status === 'NO_SHOW') {
       const isDriver = trip.role === 'driver';

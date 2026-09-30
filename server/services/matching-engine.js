@@ -220,10 +220,161 @@ function applyProPriority(rankedMatches, usersMap) {
     .sort((a, b) => b.adjustedScore - a.adjustedScore);
 }
 
+
+/**
+ * Score one (trip, candidate) pair with the deterministic Section 47 scorer.
+ * Shared by the on-demand match search and the Daily Commute matcher so both
+ * use exactly the same route / time / pickup / destination / cost logic.
+ * PURE FUNCTION.
+ */
+function scorePair(trip, ct) {
+  const routeOverlap = calculateRouteOverlap(
+    trip.route?.coordinates || [],
+    ct.route?.coordinates || [],
+    RIDE_CONFIG.routeBufferMeters
+  );
+
+  const tripOriginCoords = trip.origin?.location?.coordinates || [0, 0];
+  const ctOriginCoords = ct.origin?.location?.coordinates || [0, 0];
+  const tripDestCoords = trip.destination?.location?.coordinates || [0, 0];
+  const ctDestCoords = ct.destination?.location?.coordinates || [0, 0];
+
+  const pickupDistanceKm = haversineDistanceKm(tripOriginCoords, ctOriginCoords);
+  const destinationDistanceKm = haversineDistanceKm(tripDestCoords, ctDestCoords);
+
+  const timeCompatibility = computeTimeCompatibility(
+    trip.departureTime,
+    trip.timeWindow,
+    ct.departureTime,
+    ct.timeWindow
+  );
+
+  const budgetCompatibility = computeBudgetCompatibility(
+    { min: trip.budgetMin, max: trip.budgetMax },
+    { min: ct.budgetMin, max: ct.budgetMax }
+  );
+
+  const driverTrip = trip.role === 'driver' ? trip : ct;
+  const passengerTrip = trip.role === 'passenger' ? trip : ct;
+  const capacityCompatibility = computeCapacityCompatibility(
+    driverTrip.seatCount,
+    passengerTrip.seatCount
+  );
+
+  const scores = scoreMatch({
+    routeOverlap,
+    pickupDistanceKm,
+    destinationDistanceKm,
+    timeCompatibility,
+    budgetCompatibility,
+    capacityCompatibility,
+    transportCompatible: true,
+  });
+
+  const departureDeltaMin = Math.round(
+    (new Date(ct.departureTime).getTime() - new Date(trip.departureTime).getTime()) / 60000
+  );
+
+  return {
+    ...scores,
+    departureDeltaMin,
+    detourMin: estimateDetourMinutes(scores.detourKm),
+  };
+}
+
+/** Rough city-traffic conversion of detour distance to minutes (~25 km/h). PURE. */
+function estimateDetourMinutes(detourKm) {
+  return Math.max(0, Math.round((detourKm || 0) * (60 / RIDE_CONFIG.rankingSignals.cityAvgSpeedKmh)));
+}
+
+/**
+ * Trust + community ranking signals. PURE FUNCTION.
+ *
+ * context = {
+ *   trustByUser:   { [userId]: { overall, count, ... } }   // behavioural trust (1–10)
+ *   sharedByUser:  { [userId]: [{ id, name, category }] }  // communities shared with the searcher
+ * }
+ *
+ * - Trust adjusts rank by up to +maxBoost / -maxPenalty points, scaled by how many ratings back it up.
+ *   A user with no ratings gets exactly 0 — being new is neither rewarded nor punished.
+ * - Sharing a community adds a flat communityBoost.
+ * - Neither can make an unviable route/time match viable.
+ */
+function applyRankingSignals(rankedMatches, context = {}) {
+  const cfg = RIDE_CONFIG.rankingSignals;
+  const trustByUser = context.trustByUser || {};
+  const sharedByUser = context.sharedByUser || {};
+
+  return rankedMatches
+    .map((m) => {
+      const uid = String(m.userId);
+      const trust = trustByUser[uid];
+      let trustAdjustment = 0;
+      if (trust && trust.count > 0 && typeof trust.overall === 'number') {
+        const confidence = Math.min(trust.count, cfg.fullConfidenceAtRatings) / cfg.fullConfidenceAtRatings;
+        const raw = (trust.overall - cfg.neutralTrust) * cfg.pointsPerTrustPoint;
+        trustAdjustment = Math.max(-cfg.maxTrustPenalty, Math.min(cfg.maxTrustBoost, raw)) * confidence;
+      }
+      const shared = sharedByUser[uid] || [];
+      const communityBoost = shared.length > 0 ? cfg.communityBoost : 0;
+
+      const base = m.adjustedScore ?? m.finalScore;
+      return {
+        ...m,
+        userTrust: trust || { status: 'NEW_USER', level: 'NEW', label: 'New User', overall: null, count: 0 },
+        sharedCommunities: shared,
+        trustAdjustment: Math.round(trustAdjustment * 100) / 100,
+        communityBoost,
+        adjustedScore: Math.round((base + trustAdjustment + communityBoost) * 100) / 100,
+      };
+    })
+    .sort((a, b) => b.adjustedScore - a.adjustedScore);
+}
+
+/**
+ * Human-readable "why was this person recommended" list. PURE FUNCTION.
+ */
+function buildMatchReasons(match, context = {}) {
+  const reasons = [];
+  reasons.push(`${match.routeScore}% route compatibility`);
+
+  const delta = match.departureDeltaMin;
+  if (typeof delta === 'number') {
+    if (Math.abs(delta) <= 2) reasons.push('Leaves at almost the same time');
+    else reasons.push(`Leaves ${Math.abs(delta)} min ${delta < 0 ? 'earlier' : 'later'}`);
+  }
+
+  reasons.push(
+    match.pickupDistanceKm <= 0.5
+      ? 'Pickup within 500 m'
+      : `Pickup ${match.pickupDistanceKm} km apart`
+  );
+  reasons.push(match.detourMin > 0 ? `+${match.detourMin} min detour` : 'No extra detour');
+
+  const seats = match.candidateTrip?.role === 'driver' ? match.candidateTrip.seatCount : null;
+  if (seats) reasons.push(`${seats} seat${seats === 1 ? '' : 's'} available`);
+
+  if (match.sharedCommunities?.length) {
+    reasons.push(`Same community: ${match.sharedCommunities.map((c) => c.name).join(', ')}`);
+  }
+
+  const t = match.userTrust;
+  if (t && t.count > 0) {
+    reasons.push(
+      t.limitedHistory
+        ? `Trust ${t.overall}/10 (limited history)`
+        : `Trust ${t.overall}/10 from ${t.count} rated journeys`
+    );
+  } else {
+    reasons.push('New member — no ratings yet');
+  }
+  return reasons;
+}
+
 /**
  * Full matching pipeline orchestrator.
  */
-async function findMatches(trip, tripUser, candidateTrips, candidateUsers, geminiService) {
+async function findMatches(trip, tripUser, candidateTrips, candidateUsers, geminiService, options = {}) {
   const { applySafetyFilter } = require('./trust-safety');
 
   // Step 1: Prepare candidates with user data
@@ -246,48 +397,7 @@ async function findMatches(trip, tripUser, candidateTrips, candidateUsers, gemin
 
   // Step 4: PURE DETERMINISTIC SCORING
   const scored = eligible.map(({ trip: ct, user: cu }) => {
-    const routeOverlap = calculateRouteOverlap(
-      trip.route?.coordinates || [],
-      ct.route?.coordinates || [],
-      RIDE_CONFIG.routeBufferMeters
-    );
-
-    const tripOriginCoords = trip.origin?.location?.coordinates || [0, 0];
-    const ctOriginCoords = ct.origin?.location?.coordinates || [0, 0];
-    const tripDestCoords = trip.destination?.location?.coordinates || [0, 0];
-    const ctDestCoords = ct.destination?.location?.coordinates || [0, 0];
-
-    const pickupDistanceKm = haversineDistanceKm(tripOriginCoords, ctOriginCoords);
-    const destinationDistanceKm = haversineDistanceKm(tripDestCoords, ctDestCoords);
-
-    const timeCompatibility = computeTimeCompatibility(
-      trip.departureTime,
-      trip.timeWindow,
-      ct.departureTime,
-      ct.timeWindow
-    );
-
-    const budgetCompatibility = computeBudgetCompatibility(
-      { min: trip.budgetMin, max: trip.budgetMax },
-      { min: ct.budgetMin, max: ct.budgetMax }
-    );
-
-    const driverTrip = trip.role === 'driver' ? trip : ct;
-    const passengerTrip = trip.role === 'passenger' ? trip : ct;
-    const capacityCompatibility = computeCapacityCompatibility(
-      driverTrip.seatCount,
-      passengerTrip.seatCount
-    );
-
-    const scores = scoreMatch({
-      routeOverlap,
-      pickupDistanceKm,
-      destinationDistanceKm,
-      timeCompatibility,
-      budgetCompatibility,
-      capacityCompatibility,
-      transportCompatible: true,
-    });
+    const scores = scorePair(trip, ct);
 
     return {
       tripId: ct._id,
@@ -308,7 +418,12 @@ async function findMatches(trip, tripUser, candidateTrips, candidateUsers, gemin
   candidateUsers.forEach((u) => {
     usersMap[u._id.toString()] = u;
   });
-  const ranked = applyProPriority(scored, usersMap);
+  const proRanked = applyProPriority(scored, usersMap);
+
+  // Step 5b: TRUST + COMMUNITY ranking signals (after safety, after scoring).
+  // These only re-order candidates that already passed every gate; they can never
+  // rescue a candidate below the minimum-viable route/time score (Step 6 uses finalScore).
+  const ranked = applyRankingSignals(proRanked, options.context);
 
   // Step 6: Honest Match Filtering (Requirement 2)
   // Never show results below the minimum viable threshold (40%) in normal results.
@@ -334,9 +449,10 @@ async function findMatches(trip, tripUser, candidateTrips, candidateUsers, gemin
   }
 
   // Step 7: Gemini explanations for top honest results
-  const topResults = candidatesToShow.slice(0, 5);
+  const topResults = candidatesToShow.slice(0, options.limit || 5);
   for (const match of topResults) {
     match.isFallbackMatch = isFallback;
+    match.reasons = buildMatchReasons(match, options.context);
     if (geminiService && typeof geminiService.generateMatchExplanation === 'function') {
       try {
         const explanation = await geminiService.generateMatchExplanation({
@@ -368,5 +484,9 @@ module.exports = {
   classifyMatchType,
   scoreMatch,
   applyProPriority,
+  scorePair,
+  estimateDetourMinutes,
+  applyRankingSignals,
+  buildMatchReasons,
   findMatches,
 };

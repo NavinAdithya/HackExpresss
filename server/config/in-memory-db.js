@@ -22,6 +22,9 @@ const store = {
   ratings: [],
   sosAlerts: [],
   penalties: [],
+  communities: [],
+  communityMembers: [],
+  dailyCommutes: [],
 };
 
 // Seed Chennai demo data
@@ -220,6 +223,17 @@ function seedInitialData() {
     { _id: '66f0000000000000000000re', rater: user2Id, ratedUser: user4Id, rating: 4, comment: 'Smooth journey' },
   ];
 
+  // Demo ratings carry the five 1–10 behavioural parameters (derived from the star values above).
+  const { dimsFromStars } = require('./community-seed');
+  const { tripRatingOverall, computeBehaviorTrust } = require('../services/behavior-trust');
+  store.ratings = store.ratings.map((r, idx) => {
+    const dims = dimsFromStars(r.rating, idx);
+    return { ...r, ...dims, overall: tripRatingOverall(dims), createdAt: new Date(Date.now() - (idx + 1) * 3600000) };
+  });
+
+  // Communities, memberships and recurring commutes (demo seed)
+  seedCommunitiesAndCommutes();
+
   // Authoritatively compute each demo user's trust score from actual activity
   const { calculateTrustScore } = require('../services/trust-score');
   for (const u of store.users) {
@@ -249,7 +263,62 @@ function seedInitialData() {
     const trustResult = calculateTrustScore(u, activity);
     u.trustScore = trustResult.score;
     u.trustScoreBreakdown = trustResult;
+
+    // Cached behavioural trust summary (5 parameters, 1–10)
+    const behavior = computeBehaviorTrust(userRatings);
+    behavior.completedJourneys = userTrips.filter((t) => t.userId === u._id && t.matchedUserId).length;
+    u.behaviorTrust = behavior;
   }
+}
+
+function seedCommunitiesAndCommutes() {
+  const { COMMUNITY_SEED, COMMUTE_SEED, straightRoute } = require('./community-seed');
+  const userByPhone = {};
+  store.users.forEach((u) => { userByPhone[u.phone] = u; });
+
+  COMMUNITY_SEED.forEach((c, idx) => {
+    const id = `66f0000000000000000001${idx.toString(16).padStart(2, '0')}`;
+    const members = c.members.filter((p) => userByPhone[p]);
+    store.communities.push({
+      _id: id, name: c.name, slug: c.key, category: c.category, description: c.description,
+      createdBy: null, memberCount: members.length, createdAt: new Date(), updatedAt: new Date(),
+    });
+    members.forEach((phone) => {
+      store.communityMembers.push({
+        _id: generateId(), communityId: id, userId: userByPhone[phone]._id,
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+    });
+  });
+
+  COMMUTE_SEED.forEach((c, idx) => {
+    const u = userByPhone[c.phone];
+    if (!u) return;
+    const route = straightRoute(c.origin.coordinates, c.destination.coordinates);
+    store.dailyCommutes.push({
+      _id: `66f0000000000000000002${idx.toString(16).padStart(2, '0')}`,
+      userId: u._id,
+      label: c.label,
+      origin: { address: c.origin.address, location: { type: 'Point', coordinates: c.origin.coordinates } },
+      destination: { address: c.destination.address, location: { type: 'Point', coordinates: c.destination.coordinates } },
+      route,
+      routeDistance: 9000,
+      routeDuration: 1200,
+      departureTime: c.departureTime,
+      arrivalTime: '',
+      days: c.days,
+      timezoneOffsetMin: 330,
+      timeWindow: 20,
+      role: c.role,
+      transportMode: c.transportMode,
+      availableSeats: c.availableSeats,
+      requiredSeats: c.requiredSeats,
+      autoMatchEnabled: true,
+      active: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  });
 }
 
 // Helper to wrap object with Mongoose Document methods
@@ -338,7 +407,11 @@ function matchesQuery(item, query) {
 
     const itemVal = item[key];
 
-    if (val && typeof val === 'object' && !(val instanceof Date)) {
+    // ObjectId values are scalars, not operator objects — comparing them by string below.
+    // (Without this, findById(<ObjectId>) silently matched the FIRST document in the store.)
+    const isOperatorObject =
+      val && typeof val === 'object' && !(val instanceof Date) && !val._bsontype && !Array.isArray(val);
+    if (isOperatorObject) {
       if (val.$in) {
         const strVal = itemVal?.toString();
         const inList = val.$in.map((v) => v?.toString());
@@ -411,6 +484,9 @@ function setupInMemoryFallback() {
   require('../models/Rating');
   require('../models/SOSAlert');
   require('../models/Penalty');
+  require('../models/Community');
+  require('../models/CommunityMember');
+  require('../models/DailyCommute');
 
   const models = [
     { name: 'User', coll: 'users' },
@@ -419,6 +495,9 @@ function setupInMemoryFallback() {
     { name: 'Rating', coll: 'ratings' },
     { name: 'SOSAlert', coll: 'sosAlerts' },
     { name: 'Penalty', coll: 'penalties' },
+    { name: 'Community', coll: 'communities' },
+    { name: 'CommunityMember', coll: 'communityMembers' },
+    { name: 'DailyCommute', coll: 'dailyCommutes' },
   ];
 
   for (const { name, coll } of models) {

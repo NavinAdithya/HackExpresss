@@ -12,11 +12,17 @@ import { theme } from '../theme';
 
 const navItems = [
   { path: '/', label: 'Home', icon: '🏠' },
-  { path: '/trips', label: 'Trips', icon: '🗺️' },
+  { path: '/commute', label: 'Commute', icon: '🔁' },
+  { path: '/communities', label: 'Communities', icon: '👥' },
   { path: '/trip/create', label: '', icon: '➕', isCenter: true },
+  { path: '/trips', label: 'Trips', icon: '🗺️' },
   { path: '/plans', label: 'Plans', icon: '⭐' },
   { path: '/profile', label: 'Profile', icon: '👤' },
 ];
+
+// A nav item is active for its own path and any nested page (e.g. /communities/:id).
+const isActive = (current: string, path: string) =>
+  path === '/' ? current === '/' : current === path || current.startsWith(`${path}/`);
 
 function NavItem({ item, active, onClick }: {
   item: typeof navItems[0];
@@ -41,7 +47,8 @@ function NavItem({ item, active, onClick }: {
           border: 'none',
           cursor: 'pointer',
           boxShadow: '0 4px 20px rgba(0, 212, 255, 0.3)',
-          margin: '0 4px',
+          margin: '0 2px',
+          flexShrink: 0,
         }}
       >
         {item.icon}
@@ -58,16 +65,16 @@ function NavItem({ item, active, onClick }: {
         flexDirection: 'column',
         alignItems: 'center',
         gap: '2px',
-        padding: '8px 14px',
+        padding: '6px 5px',
         borderRadius: '16px',
         background: active ? 'rgba(0, 212, 255, 0.1)' : 'transparent',
         border: 'none',
         cursor: 'pointer',
         transition: 'all 0.2s ease',
-        minWidth: '56px',
+        minWidth: 0,
       }}
     >
-      <span style={{ fontSize: '1.25rem' }}>{item.icon}</span>
+      <span style={{ fontSize: '1.15rem' }}>{item.icon}</span>
       <span style={{
         fontSize: '0.5625rem',
         fontWeight: active ? 600 : 400,
@@ -101,7 +108,7 @@ export function AppLayout() {
             <NavItem
               key={item.path}
               item={item}
-              active={location.pathname === item.path}
+              active={isActive(location.pathname, item.path)}
               onClick={() => navigate(item.path)}
             />
           ))}
