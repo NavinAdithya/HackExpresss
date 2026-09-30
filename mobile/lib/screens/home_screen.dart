@@ -7,6 +7,8 @@ import '../models/profile_model.dart';
 import '../services/location_service.dart';
 import '../shared/widgets/glass_widgets.dart';
 import '../shared/widgets/glass_nav.dart';
+import '../shared/widgets/safety_button.dart';
+import '../shared/widgets/active_safety_banner.dart';
 import 'find_ride_screen.dart';
 import 'share_commute_screen.dart';
 import 'trips_screen.dart';
@@ -303,7 +305,8 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
-          const SizedBox(height: 16),
+          const ActiveSafetyBanner(),
+          const SizedBox(height: 12),
           _buildHeroSection(),
           const SizedBox(height: 16),
           _buildSegmentSwitch(),
@@ -370,23 +373,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Row(
             children: [
+              const SafetyButton(),
+              const SizedBox(width: 8),
               POGlassPill(
                 text: _user.plan,
                 color: POTheme.primary,
                 textColor: POTheme.cream,
                 icon: Icons.verified_rounded,
-              ),
-              const SizedBox(width: 8),
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0x33FFFFFF),
-                  border: Border.all(color: POTheme.glassBorder),
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.notifications_none_rounded, color: POTheme.cream, size: 20),
-                  onPressed: () {},
-                ),
               ),
             ],
           ),

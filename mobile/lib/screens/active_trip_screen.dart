@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import '../models/match_model.dart';
 import '../services/face_verification_service.dart';
+import '../shared/widgets/safety_button.dart';
 
 enum TripPhase {
   identityVerify,
@@ -83,6 +84,12 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         title: const Text('Live Commute', style: TextStyle(fontWeight: FontWeight.w800, color: POTheme.cream)),
         backgroundColor: POTheme.surface,
         elevation: 0,
+        actions: const [
+          Padding(
+            padding: EdgeInsets.only(right: 12),
+            child: Center(child: SafetyButton()),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
