@@ -17,7 +17,7 @@
  *    - Interactive Leaflet map showing origin, destination, and candidate route
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GlassSurface, GlassButton, GlassCard, PlanBadge } from '../glass';
