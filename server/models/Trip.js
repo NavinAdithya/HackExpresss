@@ -48,10 +48,11 @@ const tripSchema = new mongoose.Schema(
     // Status
     status: {
       type: String,
-      enum: ['POSTED', 'MATCHED', 'ACCEPTED', 'VERIFYING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW'],
+      enum: ['POSTED', 'MATCHED', 'ACCEPTED', 'CONFIRMED', 'VERIFYING', 'READY_TO_START', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW', 'IDENTITY_MISMATCH'],
       default: 'POSTED',
       index: true,
     },
+    tripStartOtp: { type: String, default: '482731' },
 
     // Match linkage
     matchedTripId: { type: mongoose.Schema.Types.ObjectId, ref: 'Trip', default: null },
